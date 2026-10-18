@@ -1,0 +1,22 @@
+# User-supplied game data
+*.nds
+*.NDS
+*.rom
+*.ROM
+*.iso
+*.ISO
+
+# Private/generated APRICOT data
+*.oqgame
+*.oqsave
+/private/
+/private-*/
+/test-inputs/
+/build/
+/dist/
+/out/
+
+# Local tooling
+.vscode/
+.idea/
+.DS_Store
