@@ -1,10 +1,10 @@
-# APRICOT status
+# ApricotGS status
 
 Date: 2026-10-19
 
 ## Public release state
 
-The public project repository is [BaZZtian/apricot-ps5](https://github.com/BaZZtian/apricot-ps5). The Prospero catalog entry for PPSA99429 is a Coming-soon reservation. It has no public version, artifact URL, checksum, or download.
+The public project repository is [BaZZtian/PS5-ApricotGS](https://github.com/BaZZtian/PS5-ApricotGS). The Prospero catalog entry for PPSA99429 is a Coming-soon reservation. It has no public version, artifact URL, checksum, or download.
 
 The repository contains no ROM/ISO, extracted game data, original game assets, BIOS/firmware, game-derived native module, save file, or executable release. The old synthetic module test remains historical evidence only; it is not a game build.
 
@@ -26,7 +26,7 @@ No emulator CPU core, interpreter, or JIT fallback is part of the intended archi
 
 ## Planned edition handling
 
-Each locally prepared game input will be identified from its verified header and content identity. If both editions are present, APRICOT should show an edition choice at launch. If exactly one is present, it should start that edition automatically. Saves remain isolated by edition and verified input identity.
+Each locally prepared game input will be identified from its verified header and content identity. If both editions are present, ApricotGS should show an edition choice at launch. If exactly one is present, it should start that edition automatically. Saves remain isolated by edition and verified input identity.
 
 This launcher behavior is a planned feature and is not promised by the current catalog reservation.
 
