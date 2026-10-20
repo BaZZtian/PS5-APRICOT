@@ -1,12 +1,12 @@
-# APRICOT
+# ApricotGS
 
-APRICOT is a native PS5 development project for two related handheld RPG editions.
+ApricotGS is a native PS5 development project for two related handheld RPG editions.
 
 The public repository contains original source and documentation only. It does not contain a ROM/ISO, game assets, BIOS or firmware, a game-derived module, save data, or a playable release. Users must provide and process their own legally obtained game data locally.
 
 ## Current status
 
-APRICOT is in private pre-release development. A statically translated native startup path and early save/load flow have been verified privately. A previous v0.1.2 preview also reached the native intro/title path on the physical PS5.
+ApricotGS is in private pre-release development. A statically translated native startup path and early save/load flow have been verified privately. A previous v0.1.2 preview also reached the native intro/title path on the physical PS5.
 
 The complete game is not released. Battles, the full campaign, both-edition selection, complete HeartGold coverage, and a compatible link/trading service are still development work. See [docs/APRICOT-STATUS.md](docs/APRICOT-STATUS.md) for the dated status record.
 
@@ -21,7 +21,7 @@ The planned launcher can select either prepared edition when both are installed 
 
 ## Clean-room and licensing scope
 
-APRICOT publishes original implementation and documentation plus correctly attributed open-source dependencies where their licenses permit use. License notices are retained. No Nintendo or game-specific proprietary source, graphics, music, text, ROM data, or derived executable is published.
+ApricotGS publishes original implementation and documentation plus correctly attributed open-source dependencies where their licenses permit use. License notices are retained. No Nintendo or game-specific proprietary source, graphics, music, text, ROM data, or derived executable is published.
 
 This repository is a development record and does not provide a legal determination for a particular jurisdiction. Users are responsible for their own game data and for complying with applicable law.
 
@@ -32,7 +32,7 @@ This repository is a development record and does not provide a legal determinati
 - `v0.1.1`: feature release
 - `v1.0.0`: full release
 
-There is currently no public APRICOT release artifact. The Prospero catalog entry is a Coming-soon reservation only.
+There is currently no public ApricotGS release artifact. The Prospero catalog entry is a Coming-soon reservation only.
 
 ## Repository policy
 
