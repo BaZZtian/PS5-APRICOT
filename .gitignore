@@ -1,22 +1,38 @@
-# User-supplied game data
+# Public release tree: app files, app icon/metadata and required legal notices only.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
 *.nds
-*.NDS
-*.rom
-*.ROM
 *.iso
-*.ISO
-
-# Private/generated APRICOT data
+*.rom
 *.oqgame
 *.oqsave
-/private/
-/private-*/
-/test-inputs/
-/build/
+*.ram
+*.dmp
+*.s16le
+*.at9
+/tests/
+/test/
+/docs/
+/planning/
+/verification/
+/dependencies/
+/tools/
+/local/
+/private*/
+/build*/
 /dist/
-/out/
-
-# Local tooling
+/output*/
+/release-review/
+AGENTS.md
+KNOWN-ISSUES.md
+RELEASING.md
+SUPPORT-REPORT.md
+TESTED.md
 .vscode/
 .idea/
-.DS_Store
+__pycache__/
