@@ -69,3 +69,9 @@ pull request, build, release, and Store/catalog submission.**
   established: **do not publish, package, merge, or submit a release**.
 - Do not bypass these rules to meet a deadline. This document is operational
   guidance only: it does not itself license, transfer, or revoke any copyright.
+
+## 4. Project-specific known rights (not a complete legal audit)
+
+- The public ApricotGS repository already has an MIT license bearing `Copyright (c) 2026 BaZZtian`. That existing public grant must not be presented as withdrawn.
+- The private native player, static translator, generated modules and any third-party components require separate file/commit/license review before publication; no conclusion about the uninspected private build.
+- Nintendo game code, ROMs, assets and names are not licensed by the repository.
