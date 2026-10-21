@@ -1,43 +1,174 @@
+<div align="center">
+
+<img src="sce_sys/icon0.png" alt="ApricotGS" width="144" />
+
 # ApricotGS
 
-![ApricotGS](sce_sys/icon0.png)
+**HeartGold & SoulSilver on PlayStation 5**
 
-A native PS5 player for HeartGold and SoulSilver. Users provide and prepare their own legally obtained NDS game data. No ROM/ISO, game assets, music, generated game module or savegame is included.
+A dedicated native player, with local static compilation from your own game dump.
 
-## Mandatory rights and publication rules
+[Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases) · [Installation](#installation) · [Controls](#controls) · [Compatibility](#compatibility) · [Report an issue](https://github.com/BaZZtian/PS5-ApricotGS/issues)
 
-This repository is maintained as a PS5 port, **not** as ownership of the
-underlying game, engine or third-party contributions. Existing authors retain
-their copyright and license terms without alteration or re-licensing.
-Only independently authored contributions are controlled by their actual
-rightsholders; no new license is granted by assumption. Missing rights or
-incompatible license obligations block publication.
+</div>
 
-Commit only functional public files, user-facing documentation and required
-notices. Never commit secrets, credentials, personal saves, game data,
-private test results, internal planning, AI transcripts or local diagnostic
-logs. Review every diff and release artifact before publishing. Git ignore
-rules do not remove sensitive data from history. Store submissions must identify
-the port maintainer, not claim original-game or engine ownership.
+![ApricotGS original launcher artwork](assets/branding/banner.png)
+
+## About
+
+ApricotGS brings HeartGold and SoulSilver to a PS5 homebrew environment through a dedicated native player and a PC preparation tool. The PC tool statically translates the supported game's ARM9/ARM7 code into an x86-64 module. The PS5 player loads that locally generated module and supplies graphics, audio, controller, storage and save services.
+
+The project uses a native static execution path. It does not use an ARM interpreter or JIT fallback. Unsupported code paths can stop with an explicit error instead of silently switching execution methods.
+
+**Bring your own legally obtained `.nds` dump.** The download contains no game ROM, reconstructed game source, generated game module, BIOS, firmware, extracted game graphics, music or save files. All game-derived preparation stays on your own PC and console.
+
+## Features
+
+- **Two editions, one app.** HeartGold and SoulSilver have separate prepared folders. With both present, choose an edition in the animated 3D cartridge launcher; with one present, it is selected automatically.
+- **Edition-specific presentation.** Cartridge labels and title music are generated locally from the matching game data, rather than bundled in the download.
+- **DualSense controls.** Graphical PlayStation button prompts, analog movement and a touchscreen pointer controlled with the right stick and R2.
+- **Two-screen layout.** A large main screen, a secondary touchscreen view and an original ApricotGS background.
+- **Sharp presentation.** Nearest-neighbour scaling preserves the original pixel artwork. UHD output does not imply new high-resolution game textures or a native 4K internal game renderer.
+- **Separate saves.** Each edition uses its own save identity. Updating the application must not replace the user's prepared games or save directory.
+- **Optional support sharing.** A small local report can be attached manually when reporting a problem. There is no automatic report upload.
 
 ## Download
 
-There is currently no public download. A Prospero Store Coming soon entry is a reservation, not an installable release.
+Get application packages and the matching PC preparation tool from [GitHub Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases). Published releases will include checksums and their known issues.
+
+**The first public v0.0.1 package is currently being assembled; no downloadable release is published yet.** The Prospero Store entry for `PPSA99429` is currently a reservation. Its presence does not mean a package is available to install. Use this repository's releases and the live Store listing to check availability.
+
+The application title is **ApricotGS**. Prerelease status is recorded in release metadata, not added to the PS5 title name.
+
+## Requirements
+
+| Component | Requirement |
+| --- | --- |
+| Console | A homebrew-enabled PS5 with a compatible native-app environment and Prospero Store |
+| Game data | Your own supported, unmodified HeartGold or SoulSilver `.nds` dump |
+| Preparation PC | Ubuntu 24.04 x86-64, or Ubuntu 24.04 under WSL2 |
+| Build tools | LLVM/Clang 18, LLD, a C++ build environment and glslang-tools |
+| Media preparation | Python 3.12, Pillow, NumPy, Vulkan headers/loader and Mesa's Lavapipe driver |
+| Transfer | A local file-transfer service on the PS5 |
+
+An `.nds` file is a cartridge dump, not an ISO. Renaming another region or modified ROM does not make it compatible.
+
+## Installation
+
+### 1. Install the PS5 player
+
+Once the downloadable entry is live, install **ApricotGS** from Prospero Store. The player itself contains no game. Its title ID is `PPSA99429`.
+
+Keep the application installation separate from the prepared game directories described below. Do not place ROMs or saves inside an application ZIP or redistribute a populated installation.
+
+### 2. Prepare your own game on PC
+
+Use the PC preparation tool supplied with the same release. It verifies the game code, maker code, revision and full ROM fingerprint before selecting a translation profile.
+
+For Ubuntu / WSL2, install the required tools and create a Python environment:
+
+```bash
+sudo apt install clang-18 lld-18 build-essential glslang-tools \
+  libvulkan-dev mesa-vulkan-drivers python3-venv
+python3 -m venv .venv
+.venv/bin/pip install Pillow==11.3.0 numpy==2.3.4
+```
+
+From the extracted preparation package:
+
+```bash
+.venv/bin/python tools/apricot-prepare.py \
+  "/path/to/your-own-game.nds" "/path/to/private-preparation" --jobs 4
+```
+
+Choose a **new output directory** for each preparation. Existing output is not overwritten. The process extracts the required data, statically compiles the native module, and generates the matching title label and menu music locally. Initial compilation can take some time.
+
+The preparation result identifies the transfer folder and destination. Keep the complete preparation private: it contains material derived from your game dump.
+
+### 3. Transfer the prepared edition
+
+Copy the contents of the tool's edition folder to the matching location:
+
+```text
+/data/orqenva/games/
+├── heartgold/
+│   ├── edition.bin
+│   ├── game-data.bin
+│   ├── game-203.oqgame
+│   ├── identity-refs.bin
+│   ├── title-label.rgba
+│   └── title-menu.pcm
+└── soulsilver/
+    ├── edition.bin
+    ├── game-data.bin
+    ├── game-203.oqgame
+    ├── identity-refs.bin
+    ├── title-label.rgba
+    └── title-menu.pcm
+```
+
+Use the folder produced for that exact edition. A copied or renamed module from the other edition will not pass identity checks. The `orqenva` data path is retained for compatibility with existing private installations; the displayed application name is ApricotGS.
+
+### 4. Launch and play
+
+Start ApricotGS. If both complete editions are present, select the cartridge you want and confirm with Cross. If only one is prepared, that edition is selected automatically. Cartridge labels and menu audio correspond to the selected edition.
+
+Save through the game's own save menu. To leave the application, press **L3 + R3**. Back up your own save directory before changing installations or trying experimental versions.
 
 ## Controls
 
-Cross = A · Circle = B · Triangle = X · Square = Select · Touchpad click = Y · Options = Start · L1/R1 = L/R.
+| DualSense input | Game / application action |
+| --- | --- |
+| Cross | A / confirm |
+| Circle | B / back |
+| Triangle | X |
+| Square | Select |
+| Touchpad click | Y |
+| Options | Start |
+| L1 / R1 | L / R |
+| D-pad / left stick | Movement; launcher selection |
+| Right stick | Touchscreen pointer |
+| R2 | Touchscreen press |
+| L3 + R3 | Exit application |
 
-D-pad or left stick: move. Right stick: touchscreen pointer. R2: tap. L3 + R3: exit.
+The game view displays graphical button prompts. L3 alone does not toggle a blur filter.
 
-## Support
+## Compatibility
 
-Report reproducible errors in [Issues](https://github.com/BaZZtian/PS5-ApricotGS/issues), including app version, edition/language, steps and expected/actual result. Known gameplay limitations will be listed in release notes.
+The current translation profiles target these **German, revision 0** editions:
 
-The limited `debug-report.json` is shared manually and never uploaded automatically. Never attach ROMs/ISOs, generated modules, game assets/music, saves, raw logs, RAM/core dumps or the complete game folder.
+| Edition | Game code | Maker code | Status |
+| --- | --- | --- | --- |
+| HeartGold | `IPKD` | `01` | Experimental |
+| SoulSilver | `IPGD` | `01` | Experimental |
 
-## Credits and licenses
+Do not assume US, other languages, ROM hacks or modified dumps work because their headers look similar. An identity recognised by a parser is not a promise of gameplay compatibility.
 
-Original contributors retain their rights. Platform contributions include work by Mihawk-99, Mihawk and BlackBearReloaded; controller artwork derives from AHarmlessPotato's CC BY 4.0 model renders. Applicable component notices must accompany their distribution. The existing [MIT license](LICENSE) covers this repository's licensed original work, not third-party game content or all components of a future combined build.
+This is an early release project. A complete campaign has not been verified. Known problems include a reported SoulSilver stop during a house transition, transition-time frame drops/loading delays and incomplete coverage of some native targets. A previous HeartGold post-title target failure has a targeted correction; further gameplay regression testing remains necessary. The final release notes will identify the exact package's tested scope and outstanding issues.
 
-Not affiliated with Nintendo, Game Freak or Sony.
+Wireless trading, private rooms and online services are not supported release features.
+
+## Support and debugging
+
+Please open a [GitHub issue](https://github.com/BaZZtian/PS5-ApricotGS/issues) with:
+
+1. The application version and edition/game code.
+2. The steps leading to the problem, including the map or transition where it occurs.
+3. What you expected and what happened instead.
+4. Whether the issue repeats after restarting.
+
+You may attach the limited `/data/orqenva/debug-report.json` **voluntarily**. It contains the app/version, game code, phase, frame count and numeric stop categories. It contains no save contents, RAM snapshot, account details or automatic upload mechanism.
+
+**Never attach ROM/NDS/ISO files, generated modules or game source, extracted graphics/music, savegames, raw diagnostic logs, RAM/core dumps or the complete game folder.** Private diagnostic files from older test versions are not public support reports. Do not share API keys, tokens or passwords.
+
+If you see **Native target absent**, report the version, edition and steps; do not substitute another game's module. If an edition is missing, check that the complete matching prepared folder was transferred and that preparation finished successfully.
+
+## Credits, rights and licenses
+
+ApricotGS is maintained by **BaZZtian** as an independent PS5 port project. This does not confer ownership of the original game, its engine or third-party contributions. Original authors retain their copyright and license terms. Independently authored contributions remain controlled by their actual rightsholders; no additional license is granted by assumption.
+
+Platform contributions include attributed work by **Mihawk-99 / Mihawk** and **BlackBearReloaded**. The native graphics path uses the PS5 Vulkan/Mesa work and the homebrew payload SDK. Controller prompts derive from **AHarmlessPotato's** CC BY 4.0 DualSense model renders, with the required attribution and modification notices. Component licenses and required corresponding source must accompany distribution.
+
+The existing [MIT license](LICENSE) applies to the original work covered by that notice. It does not relicense GPL/LGPL components, controller artwork, proprietary game content or the combined runtime as a whole. Missing rights or incompatible license obligations block publication; third-party notices are retained.
+
+Game names are used only to identify compatibility. No game content is supplied, no affiliation with Nintendo, Game Freak or Sony is claimed, and users must have the rights required to prepare their own data under applicable law. Providing your own dump is not a blanket legal exemption.
