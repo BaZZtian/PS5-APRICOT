@@ -1,39 +1,37 @@
 # ApricotGS
 
-ApricotGS is a native PS5 development project for two related handheld RPG editions.
+![ApricotGS icon](sce_sys/icon0.png)
 
-The public repository contains original source and documentation only. It does not contain a ROM/ISO, game assets, BIOS or firmware, a game-derived module, save data, or a playable release. Users must provide and process their own legally obtained game data locally.
+A dedicated native PS5 player and PC static-translation project for HeartGold and SoulSilver. The displayed application name is **ApricotGS**. Development status belongs in release notes, not in the title.
+
+**Bring your own legally obtained game data.** No ROM/ISO, game-derived executable, reconstructed game source, extracted graphics/music, BIOS/firmware or savegame is distributed here. The PC preparation step must generate each user's private output locally; the PS5 player supplies platform services.
 
 ## Current status
 
-ApricotGS is in private pre-release development. A statically translated native startup path and early save/load flow have been verified privately. A previous v0.1.2 preview also reached the native intro/title path on the physical PS5.
+Private build0.5.6 was installed, fully readback-verified and started on PS5. Both German editions have independently prepared modules, title imagery/music and separate save identities. A two-cartridge selector, native controller/audio/display services and early gameplay have private test evidence. No interpreter or JIT fallback is used.
 
-The complete game is not released. Battles, the full campaign, both-edition selection, complete HeartGold coverage, and a compatible link/trading service are still development work. See [docs/APRICOT-STATUS.md](docs/APRICOT-STATUS.md) for the dated status record.
+The current public repository is a development record, **not a downloadable playable release**. A first public experimental package is intended as v0.0.1. Known gameplay bugs may be addressed through later patches; a complete campaign has not been verified. See [tested scope](TESTED.md) and [known issues](KNOWN-ISSUES.md).
 
-## Intended architecture
+The next0.5.7 candidate removes the old display-name suffix and adds a small manually shareable support report. Host ASan/UBSan13/13 passes; console verification of that candidate is pending. Private version numbers do not imply a public release.
 
-- A PC preparation tool reads a user's own NDS image, verifies its game identity, and produces a matched native module and data manifest.
-- A PS5 player loads that matched private output and provides native display, audio, input, file, save, and graphics services.
-- The project targets statically translated native execution. It does not use a CPU interpreter, JIT, or emulator core as a fallback.
-- The two editions remain separate inputs and save identities even though they share an engine family.
+## Controls
 
-The planned launcher can select either prepared edition when both are installed and auto-select the only prepared edition when only one is present. This behavior is planned, not yet part of a public build.
+The current private build displays actual DualSense button artwork next to game inputs. Cross maps to A, Circle to B, Triangle to X, Square to Select, touchpad click to Y, Options to Start, L1/R1 to L/R. Left stick or D-pad moves; right stick moves the touchscreen pointer; R2 taps. L3+R3 exits. L3 alone no longer blurs the image.
 
-## Clean-room and licensing scope
+## Help with debugging
 
-ApricotGS publishes original implementation and documentation plus correctly attributed open-source dependencies where their licenses permit use. License notices are retained. No Nintendo or game-specific proprietary source, graphics, music, text, ROM data, or derived executable is published.
+Please report reproducible errors in [GitHub Issues](https://github.com/BaZZtian/PS5-ApricotGS/issues). Include app version, edition/game code, language, steps, expected result and actual result. Clearly distinguish a repeated failure from an occasional observation.
 
-This repository is a development record and does not provide a legal determination for a particular jurisdiction. Users are responsible for their own game data and for complying with applicable law.
+In the0.5.7 candidate, the limited report is `/data/orqenva/debug-report.json`. Sharing is voluntary and manual. **Never attach ROM/ISO/NDS files, game assets/music, generated modules, saves, raw logs, RAM/core dumps or the complete game folder.** Existing `.txt` and `.ram` files in the diagnostics directory are private developer evidence, not public support reports. [Report contents and privacy](SUPPORT-REPORT.md).
 
-## Versioning
+## Preparation and releases
 
-- `v0.0.1`: pre-release / alpha start
-- `v0.0.2`: bug-fix release
-- `v0.1.1`: feature release
-- `v1.0.0`: full release
+The existing private workflow is not yet a finished public builder. An empty-user-directory test still needs to prove static initialization-variant generation without developer fixtures. Dependency source/license closure, distributable cartridge geometry and final package review remain required. [Release checklist](RELEASING.md).
 
-There is currently no public ApricotGS release artifact. The Prospero catalog entry is a Coming-soon reservation only.
+The Prospero Store title reservation is PPSA99429, named ApricotGS. A Coming soon record is not a download. Only link a published, audited app ZIP with its exact checksum after the preparation path works. Store acceptance is reviewed by its maintainers.
 
-## Repository policy
+## Licensing and credits
 
-Do not commit ROMs, extracted game data, generated game modules, private save files, screenshots containing game content, BIOS/firmware, or build outputs. Private test inputs stay outside this repository.
+Original project documentation and independently authored helpers retain their own notices. The private player includes attributed open-source work by Mihawk-99, Mihawk and BlackBearReloaded; GPL/LGPL terms must accompany any corresponding release. Controller artwork derives from AHarmlessPotato's CC BY4.0 DualSense model renders; original notices must be retained. No umbrella license grants rights to third-party game content.
+
+No affiliation with Nintendo, Game Freak or Sony is claimed. This is not a legal guarantee, and a user's ownership of a copy does not by itself settle every jurisdiction's reproduction/circumvention rules. AI assistance is used under project-owner oversight.

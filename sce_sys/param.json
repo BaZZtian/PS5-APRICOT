@@ -1,0 +1,32 @@
+{
+  "titleId": "PPSA99429",
+  "applicationCategoryType": 0,
+  "applicationDrmType": "free",
+  "attribute": 0,
+  "conceptId": "99429",
+  "contentBadgeType": 1,
+  "contentId": "UP9000-PPSA99429_00-APRICOTGSREADER00",
+  "contentVersion": "00.005.007",
+  "downloadDataSize": 256,
+  "kernel": {
+    "flexibleMemorySize": 1073741824
+  },
+  "localizedParameters": {
+    "defaultLanguage": "en-US",
+    "en-US": {
+      "titleName": "ApricotGS"
+    },
+    "de-DE": {
+      "titleName": "ApricotGS"
+    }
+  },
+  "masterVersion": "01.00",
+  "targetContentVersion": "00.005.007",
+  "gameIntent": {
+    "permittedIntents": [
+      {
+        "intentType": "launchActivity"
+      }
+    ]
+  }
+}
