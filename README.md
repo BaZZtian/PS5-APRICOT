@@ -4,6 +4,22 @@
 
 A native PS5 player for HeartGold and SoulSilver. Users provide and prepare their own legally obtained NDS game data. No ROM/ISO, game assets, music, generated game module or savegame is included.
 
+## Mandatory rights and publication rules
+
+This repository is maintained as a PS5 port, **not** as ownership of the
+underlying game, engine or third-party contributions. Existing authors retain
+their copyright and license terms without alteration or re-licensing.
+Only independently authored contributions are controlled by their actual
+rightsholders; no new license is granted by assumption. Missing rights or
+incompatible license obligations block publication.
+
+Commit only functional public files, user-facing documentation and required
+notices. Never commit secrets, credentials, personal saves, game data,
+private test results, internal planning, AI transcripts or local diagnostic
+logs. Review every diff and release artifact before publishing. Git ignore
+rules do not remove sensitive data from history. Store submissions must identify
+the port maintainer, not claim original-game or engine ownership.
+
 ## Download
 
 There is currently no public download. A Prospero Store Coming soon entry is a reservation, not an installable release.
