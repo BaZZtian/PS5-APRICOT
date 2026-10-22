@@ -1,16 +1,27 @@
-<div align="center">
+<p align="center">
+  <img src="sce_sys/icon0.png" width="160" height="160" alt="ApricotGS project icon">
+</p>
 
-<img src="sce_sys/icon0.png" alt="ApricotGS" width="144" />
+<h1 align="center">ApricotGS</h1>
 
-# ApricotGS
+<p align="center">
+  <strong>HeartGold &amp; SoulSilver on PlayStation 5</strong><br>
+  An independent native PS5 homebrew project by <a href="https://github.com/BaZZtian">BaZZtian</a>.
+</p>
 
-**HeartGold & SoulSilver on PlayStation 5**
+<p align="center">
+  <a href="#status-and-availability"><img src="https://img.shields.io/badge/status-experimental%20release-orange" alt="Status: experimental release"></a>
+  <img src="https://img.shields.io/badge/platform-PS5%20homebrew-003791" alt="Platform: PS5 homebrew">
+  <a href="#requirements"><img src="https://img.shields.io/badge/game%20data-Own%20NDS%20dump-555555" alt="Game data: Own NDS dump"></a>
+</p>
 
-A dedicated native player, with local static compilation from your own game dump.
-
-[Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases) · [Installation](#installation) · [Controls](#controls) · [Compatibility](#compatibility) · [Report an issue](https://github.com/BaZZtian/PS5-ApricotGS/issues)
-
-</div>
+<p align="center">
+  <a href="#status-and-availability">Status</a> &middot;
+  <a href="#installation">Installation</a> &middot;
+  <a href="#compatibility">Compatibility</a> &middot;
+  <a href="#support">Support</a> &middot;
+  <a href="#credits-and-licenses">Credits &amp; licenses</a>
+</p>
 
 ## About
 
@@ -19,6 +30,14 @@ ApricotGS brings HeartGold and SoulSilver to a PS5 homebrew environment through 
 The project uses a native static execution path. It does not use an ARM interpreter or JIT fallback. Unsupported code paths can stop with an explicit error instead of silently switching execution methods.
 
 **Bring your own legally obtained `.nds` dump.** The download contains no game ROM, reconstructed game source, generated game module, BIOS, firmware, extracted game graphics, music or save files. All game-derived preparation stays on your own PC and console.
+
+## Status and availability
+
+Get application packages and the matching PC preparation tool from [GitHub Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases). Published releases will include checksums and their known issues.
+
+**[v0.0.1](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.0.1) is an early experimental release.** Download the PS5 player and matching PC Builder and Source packages together. Prospero Store availability is separate from GitHub publication: check the live Store listing before attempting a Store installation. Known gameplay errors are listed below.
+
+The application title is **ApricotGS**. Prerelease status is recorded in release metadata, not added to the PS5 title name.
 
 ## Features
 
@@ -29,14 +48,6 @@ The project uses a native static execution path. It does not use an ARM interpre
 - **Sharp presentation.** Nearest-neighbour scaling preserves the original pixel artwork. UHD output does not imply new high-resolution game textures or a native 4K internal game renderer.
 - **Separate saves.** Each edition uses its own save identity. Updating the application must not replace the user's prepared games or save directory.
 - **Optional support sharing.** A small local report can be attached manually when reporting a problem. There is no automatic report upload.
-
-## Download
-
-Get application packages and the matching PC preparation tool from [GitHub Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases). Published releases will include checksums and their known issues.
-
-**[v0.0.1](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.0.1) is an early experimental release.** Download the PS5 player and matching PC Builder and Source packages together. Prospero Store availability is separate from GitHub publication: check the live Store listing before attempting a Store installation. Known gameplay errors are listed below.
-
-The application title is **ApricotGS**. Prerelease status is recorded in release metadata, not added to the PS5 title name.
 
 ## Requirements
 
@@ -113,6 +124,21 @@ Start ApricotGS. If both complete editions are present, select the cartridge you
 
 Save through the game's own save menu. To leave the application, press **L3 + R3**. Back up your own save directory before changing installations or trying experimental versions.
 
+## Compatibility
+
+The current translation profiles target these **German, revision 0** editions:
+
+| Edition | Game code | Maker code | Status |
+| --- | --- | --- | --- |
+| HeartGold | `IPKD` | `01` | Experimental |
+| SoulSilver | `IPGD` | `01` | Experimental |
+
+Do not assume US, other languages, ROM hacks or modified dumps work because their headers look similar. An identity recognised by a parser is not a promise of gameplay compatibility.
+
+This is an early release project. A complete campaign has not been verified. Known problems include a reported SoulSilver stop during a house transition, transition-time frame drops/loading delays and incomplete coverage of some native targets. A previous HeartGold post-title target failure has a targeted correction; further gameplay regression testing remains necessary. The final release notes will identify the exact package's tested scope and outstanding issues.
+
+Wireless trading, private rooms and online services are not supported release features.
+
 ## Controls
 
 | DualSense input | Game / application action |
@@ -131,22 +157,7 @@ Save through the game's own save menu. To leave the application, press **L3 + R3
 
 The game view displays graphical button prompts. L3 alone does not toggle a blur filter.
 
-## Compatibility
-
-The current translation profiles target these **German, revision 0** editions:
-
-| Edition | Game code | Maker code | Status |
-| --- | --- | --- | --- |
-| HeartGold | `IPKD` | `01` | Experimental |
-| SoulSilver | `IPGD` | `01` | Experimental |
-
-Do not assume US, other languages, ROM hacks or modified dumps work because their headers look similar. An identity recognised by a parser is not a promise of gameplay compatibility.
-
-This is an early release project. A complete campaign has not been verified. Known problems include a reported SoulSilver stop during a house transition, transition-time frame drops/loading delays and incomplete coverage of some native targets. A previous HeartGold post-title target failure has a targeted correction; further gameplay regression testing remains necessary. The final release notes will identify the exact package's tested scope and outstanding issues.
-
-Wireless trading, private rooms and online services are not supported release features.
-
-## Support and debugging
+## Support
 
 Please open a [GitHub issue](https://github.com/BaZZtian/PS5-ApricotGS/issues) with:
 
@@ -161,7 +172,7 @@ You may attach the limited `/data/orqenva/debug-report.json` **voluntarily**. It
 
 If you see **Native target absent**, report the version, edition and steps; do not substitute another game's module. If an edition is missing, check that the complete matching prepared folder was transferred and that preparation finished successfully.
 
-## Credits, rights and licenses
+## Credits and licenses
 
 ApricotGS is maintained by **BaZZtian** as an independent PS5 port project. This does not confer ownership of the original game, its engine or third-party contributions. Original authors retain their copyright and license terms. Independently authored contributions remain controlled by their actual rightsholders; no additional license is granted by assumption.
 
