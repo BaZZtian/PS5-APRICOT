@@ -8,7 +8,7 @@
 
 A dedicated native player, with local static compilation from your own game dump.
 
-[Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases) Â· [Installation](#installation) Â· [Controls](#controls) Â· [Compatibility](#compatibility) Â· [Report an issue](https://github.com/BaZZtian/PS5-ApricotGS/issues)
+[Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases) · [Installation](#installation) · [Controls](#controls) · [Compatibility](#compatibility) · [Report an issue](https://github.com/BaZZtian/PS5-ApricotGS/issues)
 
 </div>
 
@@ -91,20 +91,20 @@ Copy the contents of the tool's edition folder to the matching location:
 
 ```text
 /data/orqenva/games/
-â”œâ”€â”€ heartgold/
-â”‚   â”œâ”€â”€ edition.bin
-â”‚   â”œâ”€â”€ game-data.bin
-â”‚   â”œâ”€â”€ game-203.oqgame
-â”‚   â”œâ”€â”€ identity-refs.bin
-â”‚   â”œâ”€â”€ title-label.rgba
-â”‚   â””â”€â”€ title-menu.pcm
-â””â”€â”€ soulsilver/
-    â”œâ”€â”€ edition.bin
-    â”œâ”€â”€ game-data.bin
-    â”œâ”€â”€ game-203.oqgame
-    â”œâ”€â”€ identity-refs.bin
-    â”œâ”€â”€ title-label.rgba
-    â””â”€â”€ title-menu.pcm
+├── heartgold/
+│   ├── edition.bin
+│   ├── game-data.bin
+│   ├── game-203.oqgame
+│   ├── identity-refs.bin
+│   ├── title-label.rgba
+│   └── title-menu.pcm
+└── soulsilver/
+    ├── edition.bin
+    ├── game-data.bin
+    ├── game-203.oqgame
+    ├── identity-refs.bin
+    ├── title-label.rgba
+    └── title-menu.pcm
 ```
 
 Use the folder produced for that exact edition. A copied or renamed module from the other edition will not pass identity checks. The `orqenva` data path is retained for compatibility with existing private installations; the displayed application name is ApricotGS.
