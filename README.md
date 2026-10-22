@@ -12,8 +12,6 @@ A dedicated native player, with local static compilation from your own game dump
 
 </div>
 
-![ApricotGS original launcher artwork](assets/branding/banner.png)
-
 ## About
 
 ApricotGS brings HeartGold and SoulSilver to a PS5 homebrew environment through a dedicated native player and a PC preparation tool. The PC tool statically translates the supported game's ARM9/ARM7 code into an x86-64 module. The PS5 player loads that locally generated module and supplies graphics, audio, controller, storage and save services.
