@@ -1,0 +1,92 @@
+ApricotGS - third-party notices and corresponding source
+
+Project maintenance: BaZZtian. Original authors retain their copyrights.
+The root MIT notice covers only the original work to which it applies.
+The combined native player includes GPL-3.0-or-later and LGPL-2.1-or-later
+components. It is not offered under a blanket MIT license.
+
+Native app/platform tooling and loader companion
+  Authors include BlackBearReloaded, Mihawk and Mihawk-99.
+  License: GPL-3.0-or-later, with the separately identified platform/display
+  files retaining their original MIT / LGPL-2.1-or-later notices.
+  Source: https://github.com/mihawk-99/PS5_Vulkan
+  Exact tool/source revision: 5b5e4fc2d80fdb67a4f61ba9e6a8a424026bb8a5
+  Archive: https://github.com/mihawk-99/PS5_Vulkan/archive/5b5e4fc2d80fdb67a4f61ba9e6a8a424026bb8a5.tar.gz
+  libc.prx is generated from this revision's libc_builder.cpp and semantic
+  manifests. It is not copied from a console system module. Reproduction in
+  this release preparation matched SHA256
+  e6ff45d16adf687855cc3b33b0c8a4132b6504360b221e0a34c7e99fb3ba0036.
+
+Homebrew PS5 payload SDK
+  Copyright holders include John Tornblom and Mihawk-99; retain all notices
+  in the sources and the separately licensed platform components.
+  Source: https://github.com/mihawk-99/PS5_PayloadSDK
+  Exact revision: b83202be73e930050e00de0f1b4d9ec46c0391bf
+  Archive: https://github.com/mihawk-99/PS5_PayloadSDK/archive/b83202be73e930050e00de0f1b4d9ec46c0391bf.tar.gz
+  The regex, allocator and platform notices are supplied in licenses/.
+
+Mesa RADV for PS5
+  Copyright: the Mesa contributors, including AMD and Intel; individual
+  source-file copyright/license notices remain authoritative.
+  Source: https://github.com/mihawk-99/PS5_Mesa
+  Exact revision: 7b59ef27c1b09b9671bc4153c41940c3155c3af2
+  Archive: https://github.com/mihawk-99/PS5_Mesa/archive/7b59ef27c1b09b9671bc4153c41940c3155c3af2.tar.gz
+  The used archive is built from an exported pinned commit, independently
+  of a developer working tree. Its SHA256 is
+  e70481a732a468cb6145347d8815ea06abd6a00e6e1978b7f9ab190aa17b75fe.
+  Build recipe: tools/build-radv.sh at the PS5_Vulkan revision above.
+  The release recipe disables the LLVM backend and tests; Mesa's listed
+  component licenses are retained under licenses/mesa/licenses/.
+
+zlib 1.3.1
+  Copyright (C) 1995-2022 Jean-loup Gailly and Mark Adler.
+  License: zlib; source: https://zlib.net/fossils/zlib-1.3.1.tar.gz
+  Source archive SHA256:
+  9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+  Mesa's subprojects/zlib.wrap identifies the corresponding Meson patch.
+
+LLVM runtimes and compiler builtins
+  Copyright: the LLVM Project contributors.
+  License: Apache-2.0 WITH LLVM-exception; see licenses/LLVM.txt.
+  The SDK libc++/libc++abi/libunwind build recipe pins LLVM 18.1.8:
+  https://github.com/llvm/llvm-project/tree/llvmorg-18.1.8
+  The separate compiler-rt builtins come from Ubuntu Clang18.1.3 (1ubuntu1),
+  libclang-rt-18-dev:amd64, SHA256
+  52f850cf79b9cda0b00b78aa2fed86bae6947e596cc7cafb52dba4fd88acb07d.
+  Upstream source: https://github.com/llvm/llvm-project/tree/llvmorg-18.1.3
+  Keep the source/build version used when rebuilding the app.
+
+Controller artwork
+  Based on "Playstation 5 Dualsense" by AHarmlessPotato, CC BY 4.0.
+  Source and author:
+  https://sketchfab.com/3d-models/playstation-5-dualsense-878c1f882808477ab81c2fe86d5a3936
+  https://sketchfab.com/AHarmlessPotato
+  License: https://creativecommons.org/licenses/by/4.0/
+  See assets/controller/NOTICE.md for the retained modifications/attribution.
+  Artwork is not relicensed under the surrounding source-code license.
+
+Corresponding app source and build entry point
+  The source package accompanying the same release contains the player,
+  compiler, original shaders, required headers and linking scripts. Invoke
+  platform/ps5/tools/build-game-ps5.sh after building the exact dependencies
+  above. ORQENVA_VULKAN_ROOT selects the PS5_Vulkan source/build directory;
+  PS5_CLANG and GLSLANG may select the Clang18 and glslang executables.
+  The upstream SDK and RADV archive hashes are checked by the app build.
+  Rebuilding from source permits modifying and relinking the LGPL display
+  component; no proprietary game module or developer fixture is required.
+  Game-derived code/data must be prepared privately from the user's dump.
+
+No license here grants rights to proprietary games, ROMs, extracted media,
+trademarks, saves or independently copyrighted third-party material.
+BLAKE3 1.8.2 (as vendored by this Mesa revision)
+  Copyright 2019 Jack O'Connor and Samuel Neves.
+  The Apache-2.0 option is used; its full original notice is included.
+  Source: https://github.com/BLAKE3-team/BLAKE3/tree/1.8.2
+
+Fuchsia radix sort and Berkeley SoftFloat retain their complete BSD notices
+under licenses/. Linked Mesa source/header copyright notices are reproduced
+in licenses/Mesa-COPYRIGHTS.txt.
+
+Modified for ApricotGS on 2026-10-21/22: dedicated static game preparation,
+module integration, launcher/assets, controller/save/audio adaptation and
+release privacy controls. Upstream copyrights and licenses are retained.

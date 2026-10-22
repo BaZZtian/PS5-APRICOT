@@ -65,3 +65,30 @@ __pycache__/
 **/*credentials*.json
 **/*private*.log
 **/*.dmp
+
+# Production ROM-preparation application (no development/test tools).
+!/tools/
+/tools/*
+!/tools/apricot-prepare.py
+!/tools/prepare-edition-bundle.py
+!/tools/prep_tool/
+/tools/prep_tool/*
+!/tools/prep_tool/identity_refs.py
+
+# Generated user-owned game data and private initialization traces.
+game-data.bin
+edition.bin
+identity-refs.bin
+title-menu.pcm
+title-label.rgba
+PRIVATE-PROVENANCE.json
+static-variants.json
+*-static-*.bin
+after?-ram.bin
+private-write-trace.csv
+native-catalog.json
+initialization-result.txt
+native-boot*/
+private-image-cache/
+*.sav
+*.dsv

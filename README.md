@@ -8,7 +8,7 @@
 
 A dedicated native player, with local static compilation from your own game dump.
 
-[Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases) · [Installation](#installation) · [Controls](#controls) · [Compatibility](#compatibility) · [Report an issue](https://github.com/BaZZtian/PS5-ApricotGS/issues)
+[Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases) Â· [Installation](#installation) Â· [Controls](#controls) Â· [Compatibility](#compatibility) Â· [Report an issue](https://github.com/BaZZtian/PS5-ApricotGS/issues)
 
 </div>
 
@@ -36,7 +36,7 @@ The project uses a native static execution path. It does not use an ARM interpre
 
 Get application packages and the matching PC preparation tool from [GitHub Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases). Published releases will include checksums and their known issues.
 
-**The first public v0.0.1 package is currently being assembled; no downloadable release is published yet.** The Prospero Store entry for `PPSA99429` is currently a reservation. Its presence does not mean a package is available to install. Use this repository's releases and the live Store listing to check availability.
+**[v0.0.1](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.0.1) is an early experimental release.** Download the PS5 player and matching PC Builder and Source packages together. Prospero Store availability is separate from GitHub publication: check the live Store listing before attempting a Store installation. Known gameplay errors are listed below.
 
 The application title is **ApricotGS**. Prerelease status is recorded in release metadata, not added to the PS5 title name.
 
@@ -91,20 +91,20 @@ Copy the contents of the tool's edition folder to the matching location:
 
 ```text
 /data/orqenva/games/
-├── heartgold/
-│   ├── edition.bin
-│   ├── game-data.bin
-│   ├── game-203.oqgame
-│   ├── identity-refs.bin
-│   ├── title-label.rgba
-│   └── title-menu.pcm
-└── soulsilver/
-    ├── edition.bin
-    ├── game-data.bin
-    ├── game-203.oqgame
-    ├── identity-refs.bin
-    ├── title-label.rgba
-    └── title-menu.pcm
+â”œâ”€â”€ heartgold/
+â”‚   â”œâ”€â”€ edition.bin
+â”‚   â”œâ”€â”€ game-data.bin
+â”‚   â”œâ”€â”€ game-203.oqgame
+â”‚   â”œâ”€â”€ identity-refs.bin
+â”‚   â”œâ”€â”€ title-label.rgba
+â”‚   â””â”€â”€ title-menu.pcm
+â””â”€â”€ soulsilver/
+    â”œâ”€â”€ edition.bin
+    â”œâ”€â”€ game-data.bin
+    â”œâ”€â”€ game-203.oqgame
+    â”œâ”€â”€ identity-refs.bin
+    â”œâ”€â”€ title-label.rgba
+    â””â”€â”€ title-menu.pcm
 ```
 
 Use the folder produced for that exact edition. A copied or renamed module from the other edition will not pass identity checks. The `orqenva` data path is retained for compatibility with existing private installations; the displayed application name is ApricotGS.
@@ -167,7 +167,7 @@ If you see **Native target absent**, report the version, edition and steps; do n
 
 ApricotGS is maintained by **BaZZtian** as an independent PS5 port project. This does not confer ownership of the original game, its engine or third-party contributions. Original authors retain their copyright and license terms. Independently authored contributions remain controlled by their actual rightsholders; no additional license is granted by assumption.
 
-Platform contributions include attributed work by **Mihawk-99 / Mihawk** and **BlackBearReloaded**. The native graphics path uses the PS5 Vulkan/Mesa work and the homebrew payload SDK. Controller prompts derive from **AHarmlessPotato's** CC BY 4.0 DualSense model renders, with the required attribution and modification notices. Component licenses and required corresponding source must accompany distribution.
+Platform contributions include attributed work by **Mihawk-99 / Mihawk** and **BlackBearReloaded**. The native graphics path uses the PS5 Vulkan/Mesa work and the homebrew payload SDK. Controller prompts derive from **AHarmlessPotato's** CC BY 4.0 DualSense model renders, with the required attribution and modification notices. Component notices, exact dependency source revisions and source build entry points are included in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Component licenses are retained under licenses/.
 
 The existing [MIT license](LICENSE) applies to the original work covered by that notice. It does not relicense GPL/LGPL components, controller artwork, proprietary game content or the combined runtime as a whole. Missing rights or incompatible license obligations block publication; third-party notices are retained.
 

@@ -1,0 +1,129 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Original compute rasterizer. Input triangles are natively clipped once on CPU.
+#version 450
+layout(local_size_x=8,local_size_y=8) in;
+layout(std430,binding=0) readonly buffer Input {uint words[];};
+layout(std430,binding=2) buffer Status {uint unsupported;};
+layout(std430,binding=3) writeonly buffer Work {uint frame[];};
+const uint plane=256u*192u;
+uint byte_at(uint a) {if(a>=words[7]) {atomicOr(unsupported,0x80000000u);return 0;}return (words[a>>2]>>((a&3u)*8u))&255u;}
+uint half_at(uint a) {return byte_at(a)|(byte_at(a+1)<<8);}
+uint word_at(uint a) {return half_at(a)|(half_at(a+2)<<16);}
+float number(uint a) {return uintBitsToFloat(word_at(a));}
+uvec3 rgb5(uint c) {uvec3 v=uvec3(c,c>>5,c>>10)&31u;return v*2u+uvec3(greaterThan(v,uvec3(0)));}
+uint physical(uint bank) {const uint start[9]=uint[](0,0x20000,0x40000,0x60000,0x80000,0x90000,0x94000,0x98000,0xa0000);return words[3]+start[bank];}
+uint texture_byte(uint a) {
+    uint result=0;
+    for(uint bank=0;bank<4;++bank) {
+        uint c=byte_at(words[2]+bank),base=((c>>3)&3u)*0x20000u;
+        if((c&0x87u)==0x83u&&a>=base&&a-base<0x20000u)result|=byte_at(physical(bank)+a-base);
+    }
+    return result;
+}
+uint texture_half(uint a) {return texture_byte(a)|(texture_byte(a+1)<<8);}
+uint palette_byte(uint a) {
+    uint result=0;
+    for(uint bank=4;bank<=6;++bank) {
+        uint c=byte_at(words[2]+bank),offset=(c>>3)&3u;
+        uint base=bank==4?0:(offset&1u)*0x4000u+(offset&2u)*0x8000u,size=bank==4?0x10000u:0x4000u;
+        if((c&0x87u)==0x83u&&a>=base&&a-base<size)result|=byte_at(physical(bank)+a-base);
+    }
+    return result;
+}
+uvec3 palette_color(uint a) {return rgb5(palette_byte(a)|(palette_byte(a+1)<<8));}
+int coordinate(float value,uint size,bool repeat_value,bool flip_value) {
+    int v=int(floor(value));if(!repeat_value)return clamp(v,0,int(size)-1);
+    uint p=uint(v);uint at=p&(size-1);if(flip_value&&(p&size)!=0)at=size-1-at;return int(at);
+}
+uvec4 texel(uint param,uint pal,vec2 st) {
+    uint format=(param>>26)&7u;
+    if(format==0||(words[5]&1u)==0)return uvec4(63,63,63,31);
+    uint width=8u<<((param>>20)&7u),height=8u<<((param>>23)&7u);
+    uint x=uint(coordinate(st.x,width,(param&0x10000u)!=0,(param&0x40000u)!=0));
+    uint y=uint(coordinate(st.y,height,(param&0x20000u)!=0,(param&0x80000u)!=0));
+    uint base=(param&65535u)*8u,index=y*width+x,palbase=(pal&8191u)*(format==2?8u:16u),color=0,alpha=31;
+    if(format==7) {uint direct=texture_half(base+index*2);return uvec4(rgb5(direct),(direct&0x8000u)!=0?31:0);}
+    if(format==5) {
+        uint block=base+((y>>2)*(width>>2)+(x>>2))*4u;
+        if((block&0x20000u)!=0||block>=0x60000u) {atomicOr(unsupported,8u);return uvec4(0);}
+        uint sample_value=texture_byte(block+(y&3u)),entry=(sample_value>>((x&3u)*2u))&3u;
+        uint offset=0x20000u+((block&0x1ffffu)>>1)+((block&0x40000u)!=0?0x10000u:0u);
+        uint info=texture_half(offset),mode=info>>14;palbase+=(info&0x3fffu)*4u;
+        uvec3 a=palette_color(palbase),b=palette_color(palbase+2),result;
+        if(entry==0)result=a;else if(entry==1)result=b;
+        else if(entry==3&&mode<2)return uvec4(0);
+        else if(mode==1)result=(a+b)/2u;
+        else if(mode==3)result=entry==2?(a*5u+b*3u)/8u:(a*3u+b*5u)/8u;
+        else result=palette_color(palbase+entry*2u);
+        return uvec4(result,31);
+    }
+    if(format==2)color=(texture_byte(base+(index>>2))>>((index&3u)*2u))&3u;
+    if(format==3)color=(texture_byte(base+(index>>1))>>((index&1u)*4u))&15u;
+    if(format==4)color=texture_byte(base+index);
+    if(format==1) {uint data=texture_byte(base+index);color=data&31u;alpha=(data>>5)*4u+(data>>6);}
+    if(format==6) {uint data=texture_byte(base+index);color=data&7u;alpha=data>>3;}
+    if(format>=2&&format<=4&&(param&0x20000000u)!=0&&color==0)alpha=0;
+    return uvec4(palette_color(palbase+color*2u),alpha);
+}
+float edge(vec2 a,vec2 b,vec2 p) {return (b.x-a.x)*(p.y-a.y)-(b.y-a.y)*(p.x-a.x);}
+bool top_left(vec2 a,vec2 b) {vec2 d=b-a;return d.y<0||(d.y==0&&d.x>0);}
+vec2 xy(uint a) {return vec2(number(a),number(a+4));}
+void main() {
+    uvec2 point=gl_GlobalInvocationID.xy;if(point.x>=256||point.y>=192)return;
+    uint pixel=point.y*256u+point.x,settings=words[4],control=words[5];
+    if(words[10]!=0)atomicOr(unsupported,words[10]);
+    if((control&0x4000u)!=0)atomicOr(unsupported,4u);
+    uint clear=word_at(settings+0x30),depth15=half_at(settings+0x34)&0x7fffu;
+    uint depth=(depth15<<9)|(depth15==0x7fffu?511u:0u),polyid=(clear>>24)&63u,alpha=(clear>>16)&31u;
+    uvec3 color=rgb5(clear);bool fog=(clear&0x8000u)!=0,edge_flag=false;uint coverage=31u,last_translucent=64u;
+    vec2 sample_point=vec2(point)+vec2(0.5);
+    for(uint i=0;i<words[0];++i) {
+        uint t=words[1]+i*140u,attr=word_at(t+108),param=word_at(t+112),pal=word_at(t+116),identity=word_at(t+120);
+        vec4 bounds=vec4(number(t+124),number(t+128),number(t+132),number(t+136));
+        if(sample_point.x<bounds.x||sample_point.y<bounds.y||sample_point.x>bounds.z||sample_point.y>bounds.w)continue;
+        uint mode=(attr>>4)&3u;if(mode==3) {atomicOr(unsupported,2u);continue;}
+        vec2 a=xy(t),b=xy(t+36),c=xy(t+72);
+        vec3 e=vec3(edge(b,c,sample_point),edge(c,a,sample_point),edge(a,b,sample_point));
+        if(any(lessThan(e,vec3(0))))continue;
+        if(e.x==0&&!top_left(b,c)||e.y==0&&!top_left(c,a)||e.z==0&&!top_left(a,b))continue;
+        float area=edge(a,b,c);if(area<=0)continue;vec3 bary=e/area;
+        vec3 iw=vec3(number(t+8),number(t+44),number(t+80));float divisor=dot(iw,bary);if(divisor<=0)continue;
+        float z=dot(vec3(number(t+12),number(t+48),number(t+84)),bary);
+        uint incoming=uint(clamp((words[6]&2u)!=0?4096.0/divisor:z*16777215.0,0.0,16777215.0));
+        bool equal_depth=(attr&0x4000u)!=0;
+        if(equal_depth?abs(int(incoming)-int(depth))>512:incoming>=depth)continue;
+        uint edge_mask=(identity>>16)&7u;
+        vec3 distances=e/vec3(max(length(c-b),0.00001),max(length(a-c),0.00001),max(length(b-a),0.00001));
+        float distance=1000000.0;
+        if((edge_mask&1u)!=0)distance=min(distance,distances.z);
+        if((edge_mask&2u)!=0)distance=min(distance,distances.x);
+        if((edge_mask&4u)!=0)distance=min(distance,distances.y);
+        uint polygon_alpha=(attr>>16)&31u;
+        if(polygon_alpha==0) {if(distance>0.75)continue;polygon_alpha=31;}
+        vec2 st=vec2(dot(vec3(number(t+16),number(t+52),number(t+88)),bary),dot(vec3(number(t+20),number(t+56),number(t+92)),bary))/divisor;
+        uvec3 vertex=uvec3(clamp(vec3(dot(vec3(number(t+24),number(t+60),number(t+96)),bary),
+            dot(vec3(number(t+28),number(t+64),number(t+100)),bary),dot(vec3(number(t+32),number(t+68),number(t+104)),bary))/divisor,0.0,63.0));
+        uvec4 texture_color=texel(param,pal,st);uvec3 source=vertex;uint source_alpha=polygon_alpha;
+        if(mode==1) {
+            uint at=texture_color.a==0?0:texture_color.a*2u+1u;
+            source=at==0?vertex:at==63?texture_color.rgb:(texture_color.rgb*at+vertex*(63u-at))/64u;
+        } else {
+            if(mode==2) {
+                uint toon=half_at(settings+0x60+(vertex.r>>1)*2u);source=rgb5(toon);
+                source=((texture_color.rgb+1u)*(source+1u)-1u)/64u;
+                if((control&2u)!=0)source=min(source+rgb5(toon),uvec3(63));
+            } else source=((texture_color.rgb+1u)*(vertex+1u)-1u)/64u;
+            source_alpha=((texture_color.a+1u)*(polygon_alpha+1u)-1u)/32u;
+        }
+        uint threshold=(control&4u)!=0?byte_at(settings+0x20)&31u:0u;if(source_alpha<=threshold)continue;
+        uint id=(attr>>24)&63u;bool translucent=source_alpha<31u;
+        if(translucent&&last_translucent==id)continue;
+        if(translucent)last_translucent=id;
+        if(translucent&&(control&8u)!=0&&alpha!=0) {color=(source*(source_alpha+1u)+color*(31u-source_alpha))/32u;alpha=max(alpha,source_alpha);}
+        else {color=source;alpha=source_alpha;}
+        if(!translucent||(attr&0x800u)!=0) {depth=incoming;polyid=id;edge_flag=distance<1.0;coverage=uint(clamp(16.0+distance*31.0,0.0,31.0));}
+        fog=translucent?fog&&((attr&0x8000u)!=0):(attr&0x8000u)!=0;
+    }
+    frame[pixel]=color.r|(color.g<<6)|(color.b<<12)|(alpha<<18)|(polyid<<23)|(edge_flag?1u<<29:0u)|(fog?1u<<30:0u);
+    frame[plane+pixel]=depth|(coverage<<24);
+}

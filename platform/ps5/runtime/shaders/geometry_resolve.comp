@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Original edge/fog resolve. Coverage rounding remains a development model.
+#version 450
+layout(local_size_x=8,local_size_y=8) in;
+layout(std430,binding=0) readonly buffer Input {uint words[];};
+layout(std430,binding=1) writeonly buffer Output {uint pixels[];};
+layout(std430,binding=2) buffer Status {uint unsupported;};
+layout(std430,binding=3) readonly buffer Work {uint frame[];};
+const uint plane=256u*192u;
+uint byte_at(uint a) {if(a>=words[7]) {atomicOr(unsupported,0x80000000u);return 0;}return (words[a>>2]>>((a&3u)*8u))&255u;}
+uint half_at(uint a) {return byte_at(a)|(byte_at(a+1)<<8);}
+uint word_at(uint a) {return half_at(a)|(half_at(a+2)<<16);}
+uvec3 rgb5(uint c) {uvec3 v=uvec3(c,c>>5,c>>10)&31u;return v*2u+uvec3(greaterThan(v,uvec3(0)));}
+uvec3 rgb6(uint c) {return uvec3(c,c>>6,c>>12)&63u;}
+void main() {
+    uvec2 p=gl_GlobalInvocationID.xy;if(p.x>=256||p.y>=384)return;
+    uint pixel=p.y*256u+p.x;if(p.y>=192) {pixels[pixel]=0;return;}
+    uint packed=frame[pixel],depth=frame[plane+pixel]&0xffffffu,coverage=(frame[plane+pixel]>>24)&31u;
+    uint settings=words[4],control=words[5],id=(packed>>23)&63u,alpha=(packed>>18)&31u;uvec3 color=rgb6(packed);
+    bool marked=false;uint neighbor_color=packed;bool found=false;
+    const ivec2 offsets[4]=ivec2[](ivec2(-1,0),ivec2(1,0),ivec2(0,-1),ivec2(0,1));
+    if((packed&(1u<<29))!=0)for(uint n=0;n<4;++n) {
+        ivec2 q=ivec2(p)+offsets[n];bool outside=any(lessThan(q,ivec2(0)))||any(greaterThanEqual(q,ivec2(256,192)));
+        uint other=outside?0u:uint(q.y)*256u+uint(q.x),candidate=outside?0u:frame[other];
+        uint other_id=outside?(word_at(settings+0x30)>>24)&63u:(candidate>>23)&63u;
+        uint other_depth=outside?0xffffffu:frame[plane+other]&0xffffffu;
+        if(other_id!=id&&depth<other_depth) {marked=true;if(!outside&&!found) {neighbor_color=candidate;found=true;}}
+    }
+    if((control&32u)!=0&&marked) {color=rgb5(half_at(settings+0x10+(id>>3)*2u));coverage=31;}
+    else if((control&16u)!=0&&coverage<31&&alpha==31u) {
+        uint background_alpha=(neighbor_color>>18)&31u;
+        if(found&&background_alpha!=0)color=(color*(coverage+1u)+rgb6(neighbor_color)*(31u-coverage))/32u;
+        else alpha=(alpha*(coverage+1u))/32u;
+    }
+    if((control&128u)!=0&&(packed&(1u<<30))!=0) {
+        uint shift=(control>>8)&15u,step=0x400u>>shift,offset=half_at(settings+0x3c)&0x7fffu,z=depth>>9,density;
+        if(step==0)density=byte_at(settings+0x40+(z>offset?31u:0u))&127u;
+        else {
+            uint position=z>offset+step?z-offset-step:0u,index=min(position/step,31u),fraction=position%step;
+            uint a=byte_at(settings+0x40+index)&127u,b=byte_at(settings+0x40+min(index+1u,31u))&127u;
+            density=(a*(step-fraction)+b*fraction)/step;
+        }
+        if(density==127u)density=128u;uint fog=word_at(settings+0x38);
+        if((control&64u)==0)color=(rgb5(fog)*density+color*(128u-density))/128u;
+        alpha=(((fog>>16)&31u)*density+alpha*(128u-density))/128u;
+    }
+    uvec3 rgb=(color*255u+31u)/63u;
+    pixels[pixel]=rgb.r|(rgb.g<<8)|(rgb.b<<16)|(((alpha*255u+15u)/31u)<<24);
+}

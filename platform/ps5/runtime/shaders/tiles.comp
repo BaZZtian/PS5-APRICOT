@@ -1,0 +1,236 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Original text/affine/bitmap BG and tiled-OBJ compositor. No embedded assets.
+#version 450
+layout(local_size_x=8,local_size_y=8) in;
+layout(std430,binding=0) readonly buffer InputState { uint words[]; } state;
+layout(std430,binding=1) writeonly buffer OutputPixels { uint pixels[]; } output_pixels;
+layout(std430,binding=2) buffer OutputStatus { uint flags; } status;
+const uint starts[9]=uint[9](0u,0x20000u,0x40000u,0x60000u,0x80000u,0x90000u,0x94000u,0x98000u,0xa0000u);
+const uint sizes[9]=uint[9](0x20000u,0x20000u,0x20000u,0x20000u,0x10000u,0x4000u,0x4000u,0x8000u,0x4000u);
+uint current_line=0u;
+uint row_base() {return state.words[8]+current_line*state.words[9];}
+uint byte_at(uint at) {
+    if(at>=state.words[7]||(at>>2)>=state.words.length()) {atomicOr(status.flags,256u);return 0u;}
+    return (state.words[at>>2]>>((at&3u)*8u))&255u;
+}
+uint half_at(uint at) {return byte_at(at)|(byte_at(at+1u)<<8u);}
+uint reg(uint screen,uint at,uint count) {
+    uint base=state.words[8]!=0u?row_base():state.words[0];
+    uint result=0u;for(uint n=0u;n<count;++n)result|=byte_at(base+screen*112u+at+n)<<(n*8u);return result;
+}
+uint bank_control(uint bank) {return byte_at((state.words[8]!=0u?row_base()+224u:state.words[1])+bank);}
+bool span(uint at,uint base,uint count,out uint local) {local=at-base;return at>=base&&local<count;}
+bool locate(uint bank,uint address,out uint physical) {
+    uint c=bank_control(bank),mode=c&7u,offset=(c>>3u)&3u,local=0u;bool found=false;
+    if((c&128u)==0u)return false;
+    if(address>=0x06800000u)found=mode==0u&&span((address-0x06800000u)&0xfffffu,starts[bank],sizes[bank],local);
+    else {
+        uint region=(address-0x06000000u)>>21u;
+        if(region==0u) {
+            uint p=address&0x7ffffu;
+            if(bank<4u&&mode==1u)found=span(p,offset*0x20000u,0x20000u,local);
+            if(bank==4u&&mode==1u)found=span(p,0u,0x10000u,local);
+            if((bank==5u||bank==6u)&&mode==1u)found=span(p,(offset&1u)*0x4000u+(offset&2u)*0x8000u,0x4000u,local);
+        } else if(region==1u) {
+            uint p=address&0x1ffffu;
+            if(bank==2u&&mode==4u)found=span(p,0u,0x20000u,local);
+            if(bank==7u&&mode==1u)found=span(p&0xffffu,0u,0x8000u,local);
+            if(bank==8u&&mode==1u) {found=(p&0x8000u)!=0u;local=p&0x3fffu;}
+        } else if(region==2u) {
+            uint p=address&0x3ffffu;
+            if(bank<2u&&mode==2u&&offset<2u)found=span(p,offset*0x20000u,0x20000u,local);
+            if(bank==4u&&mode==2u)found=span(p,0u,0x10000u,local);
+            if((bank==5u||bank==6u)&&mode==2u)found=span(p,(offset&1u)*0x4000u+(offset&2u)*0x8000u,0x4000u,local);
+        } else if(region==3u) {
+            uint p=address&0x1ffffu;
+            if(bank==3u&&mode==4u)found=span(p,0u,0x20000u,local);
+            if(bank==8u&&mode==2u) {found=true;local=p&0x3fffu;}
+        }
+    }
+    physical=starts[bank]+local;return found;
+}
+uint memory(uint address,uint count) {
+    uint result=0u;
+    for(uint n=0u;n<count;++n) {
+        uint combined=0u;
+        for(uint bank=0u;bank<9u;++bank) {uint at=0u;if(locate(bank,address+n,at))combined|=byte_at(state.words[2]+at);}
+        result|=combined<<(n*8u);
+    }
+    return result;
+}
+uint palette_at(uint at) {return half_at((state.words[8]!=0u?row_base()+236u:state.words[3])+at)&32767u;}
+uint oam_at(uint at) {return half_at((state.words[8]!=0u?row_base()+2284u:state.words[4])+at);}
+uint extended(uint screen,bool object,uint offset) {
+    uint result=0u;
+    for(uint bank=0u;bank<9u;++bank) {
+        uint control=bank_control(bank),mode=control&7u,local=offset;bool match=false;
+        if((control&128u)==0u)continue;
+        if(object)match=offset<8192u&&(screen!=0u?(bank==8u&&mode==3u):((bank==5u||bank==6u)&&mode==5u));
+        else if(screen!=0u)match=bank==7u&&mode==2u&&offset<32768u;
+        else if(bank==4u&&mode==4u)match=offset<32768u;
+        else if((bank==5u||bank==6u)&&mode==4u) {
+            uint begin=((control>>3u)&1u)*16384u;match=offset>=begin&&offset-begin<16384u;local=offset-begin;
+        }
+        if(match)result|=half_at(state.words[2]+starts[bank]+local);
+    }
+    return result&32767u;
+}
+struct Pixel {uint color;uint key;uint kind;bool semi;uint alpha;};
+Pixel empty_pixel() {return Pixel(0u,99u,5u,false,31u);}
+int signed16(uint x) {return int(x&0x7fffu)-int(x&0x8000u);}
+Pixel background(uint screen,uint bg,int x,int y) {
+    uint control=reg(screen,0u,4u),settings=reg(screen,8u+bg*2u,2u),size=settings>>14u;
+    if(bg==0u&&screen==0u&&((control&8u)!=0u||(control&7u)==6u)) {
+        if(state.words[10]==0u) {atomicOr(status.flags,1u);return empty_pixel();}
+        uint sx=(uint(x)+reg(0u,0x10u,2u))&511u;if(sx>=256u)return empty_pixel();
+        uint at=state.words[10]+(uint(y)*256u+sx)*4u,value=half_at(at)|(half_at(at+2u)<<16u),alpha=((value>>24u)*31u+127u)/255u;
+        if(alpha==0u)return empty_pixel();
+        uint color=((value>>3u)&31u)|(((value>>11u)&31u)<<5u)|(((value>>19u)&31u)<<10u);
+        return Pixel(color,(settings&3u)*8u+1u,0u,false,alpha);
+    }
+    uint mode=control&7u,type=0u;
+    if(mode==7u||mode==6u&&screen!=0u) {atomicOr(status.flags,1u);return empty_pixel();}
+    if(mode==6u) {
+        if(bg!=2u)return empty_pixel();type=5u;
+    } else if(bg==2u) {
+        if(mode==2u||mode==4u)type=1u;
+        else if(mode==5u)type=2u;
+    } else if(bg==3u) {
+        if(mode==1u||mode==2u)type=1u;
+        else if(mode>=3u)type=2u;
+    }
+    if((settings&64u)!=0u) {uint mosaic=reg(screen,0x4cu,2u);x-=x%int((mosaic&15u)+1u);y-=y%int(((mosaic>>4u)&15u)+1u);}
+    uint base=screen!=0u?0x06200000u:0x06000000u;
+    uint characters=((settings>>2u)&15u)*16384u+(screen!=0u?0u:((control>>24u)&7u)*65536u);
+    uint map=((settings>>8u)&31u)*2048u+(screen!=0u?0u:((control>>27u)&7u)*65536u);
+    if(type!=0u) {
+        uint at=0x20u+(bg-2u)*16u;
+        int rx=int(reg(screen,at+8u,4u)<<4u)>>4,ry=int(reg(screen,at+12u,4u)<<4u)>>4;
+        int sx=(rx+signed16(reg(screen,at,2u))*x+signed16(reg(screen,at+2u,2u))*y)>>8;
+        int sy=(ry+signed16(reg(screen,at+4u,2u))*x+signed16(reg(screen,at+6u,2u))*y)>>8;
+        if(type==2u&&(settings&128u)!=0u)type=(settings&4u)!=0u?4u:3u;
+        uint width=128u<<size,height=width;
+        if(type==3u||type==4u) {
+            const uvec2 dimensions[4]=uvec2[4](uvec2(128,128),uvec2(256,256),uvec2(512,256),uvec2(512,512));
+            width=dimensions[size].x;height=dimensions[size].y;map=((settings>>8u)&31u)*16384u;
+        } else if(type==5u) {
+            if(size>1u) {atomicOr(status.flags,1u);return empty_pixel();}
+            width=size==0u?512u:1024u;height=size==0u?1024u:512u;map=0u;
+        }
+        if((settings&0x2000u)==0u&&(sx<0||sy<0||sx>=int(width)||sy>=int(height)))return empty_pixel();
+        uint px=uint(sx)&(width-1u),py=uint(sy)&(height-1u),index=0u,color=0u;
+        if(type>=3u) {
+            uint address=base+map+(py*width+px)*(type==4u?2u:1u);
+            uint value=memory(address,type==4u?2u:1u);
+            if(type==4u) {if((value&0x8000u)==0u)return empty_pixel();color=value&32767u;}
+            else {if(value==0u)return empty_pixel();color=palette_at(screen*1024u+value*2u);}
+        } else {
+            uint entry=memory(base+map+((py/8u)*(width/8u)+px/8u)*(type==2u?2u:1u),type==2u?2u:1u);
+            px&=7u;py&=7u;
+            if(type==2u) {if((entry&1024u)!=0u)px=7u-px;if((entry&2048u)!=0u)py=7u-py;}
+            index=memory(base+characters+(entry&(type==2u?1023u:255u))*64u+py*8u+px,1u);
+            if(index==0u)return empty_pixel();
+            color=type==2u&&(control&0x40000000u)!=0u?extended(screen,false,bg*8192u+((entry>>12u)*256u+index)*2u):palette_at(screen*1024u+index*2u);
+        }
+        return Pixel(color,(settings&3u)*8u+bg+1u,bg,false,31u);
+    }
+    uint width=(size&1u)!=0u?512u:256u,height=(size&2u)!=0u?512u:256u;
+    uint sx=(uint(x)+reg(screen,0x10u+bg*4u,2u))&(width-1u),sy=(uint(y)+reg(screen,0x12u+bg*4u,2u))&(height-1u);
+    uint tx=sx/8u,ty=sy/8u;
+    uint entry=memory(base+map+((ty/32u)*(width/256u)+tx/32u)*2048u+((ty%32u)*32u+tx%32u)*2u,2u);
+    uint px=sx&7u,py=sy&7u;if((entry&1024u)!=0u)px=7u-px;if((entry&2048u)!=0u)py=7u-py;
+    bool eight=(settings&128u)!=0u;uint tile=(entry&1023u)*(eight?64u:32u);
+    uint index=memory(base+characters+tile+py*(eight?8u:4u)+(eight?px:px/2u),1u);
+    if(!eight)index=(index>>((px&1u)*4u))&15u;if(index==0u)return empty_pixel();
+    uint color;
+    if(eight&&(control&0x40000000u)!=0u) {
+        uint slot=bg<2u?bg+((settings&0x2000u)!=0u?2u:0u):bg;
+        color=extended(screen,false,slot*8192u+((entry>>12u)*256u+index)*2u);
+    } else color=palette_at(screen*1024u+((eight?0u:(entry>>12u)*16u)+index)*2u);
+    return Pixel(color,(settings&3u)*8u+bg+1u,bg,false,31u);
+}
+Pixel objects(uint screen,int x,int y,bool window_only) {
+    const uvec4 widths[3]=uvec4[3](uvec4(8,16,32,64),uvec4(16,32,32,64),uvec4(8,8,16,32));
+    const uvec4 heights[3]=uvec4[3](uvec4(8,16,32,64),uvec4(8,8,16,32),uvec4(16,32,32,64));
+    uint control=reg(screen,0u,4u),winner=0xffffffffu;Pixel result=empty_pixel();
+    for(uint n=0u;n<128u;++n) {
+        uint at=screen*1024u+n*8u,a=oam_at(at),b=oam_at(at+2u),c=oam_at(at+4u),shape=a>>14u;
+        uint mode=(a>>10u)&3u;
+        bool affine=(a&256u)!=0u;if((!affine&&(a&512u)!=0u)||shape==3u||(window_only?mode!=2u:mode==2u))continue;
+        uint size=b>>14u,w=widths[shape][size],h=heights[shape][size];
+        uint bw=affine&&(a&512u)!=0u?w*2u:w,bh=affine&&(a&512u)!=0u?h*2u:h;
+        int ox=int(b&511u);if(ox>=256)ox-=512;int oy=int(a&255u);if(oy>=192)oy-=256;
+        int px=x-ox,py=y-oy;if(px<0||py<0||uint(px)>=bw||uint(py)>=bh)continue;
+        if((a&0x1000u)!=0u) {atomicOr(status.flags,2u);continue;}
+        if(mode==3u) {atomicOr(status.flags,4u);continue;}
+        if(affine) {
+            uint matrix=screen*1024u+((b>>9u)&31u)*32u;
+            int pa=signed16(oam_at(matrix+6u)),pb=signed16(oam_at(matrix+14u)),pc=signed16(oam_at(matrix+22u)),pd=signed16(oam_at(matrix+30u));
+            int dx=px-int(bw/2u),dy=py-int(bh/2u);px=((pa*dx+pb*dy)>>8)+int(w/2u);py=((pc*dx+pd*dy)>>8)+int(h/2u);
+            if(px<0||py<0||uint(px)>=w||uint(py)>=h)continue;
+        } else {if((b&0x1000u)!=0u)px=int(w)-1-px;if((b&0x2000u)!=0u)py=int(h)-1-py;}
+        bool eight=(a&0x2000u)!=0u,linear=(control&16u)!=0u;uint name=c&1023u;
+        if(eight&&!linear)name&=~1u;
+        uint base=name*(linear?(32u<<((control>>20u)&3u)):32u);
+        uint tile=uint(py/8)*(linear?(w/8u)*(eight?64u:32u):1024u)+uint(px/8)*(eight?64u:32u);
+        uint index=memory((screen!=0u?0x06600000u:0x06400000u)+base+tile+uint(py&7)*(eight?8u:4u)+(eight?uint(px&7):uint((px&7)/2)),1u);
+        if(!eight)index=(index>>uint((px&1)*4))&15u;if(index==0u)continue;
+        if(window_only)return Pixel(0u,0u,4u,false,31u);
+        uint key=((c>>10u)&3u)*128u+n;if(key>=winner)continue;
+        uint color=eight&&(control&0x80000000u)!=0u?extended(screen,true,((c>>12u)*256u+index)*2u):
+            palette_at(screen*1024u+512u+((eight?0u:(c>>12u)*16u)+index)*2u);
+        winner=key;result=Pixel(color,((c>>10u)&3u)*8u,4u,mode==1u,31u);
+    }
+    return result;
+}
+uint brightness(uint color,uint amount,bool increase) {
+    uint result=0u;amount=min(amount,16u);
+    for(uint n=0u;n<3u;++n) {uint c=(color>>(n*5u))&31u;c=increase?c+(31u-c)*amount/16u:c-c*amount/16u;result|=c<<(n*5u);}
+    return result;
+}
+void insert_pixel(Pixel p,inout Pixel first,inout Pixel second,inout uint count) {
+    if(p.key==99u)return;++count;
+    if(p.key<first.key) {second=first;first=p;}else if(p.key<second.key)second=p;
+}
+bool interval(uint position,uint limits,bool vertical) {
+    uint begin=(limits>>8u)&255u,end=limits&255u;
+    if(vertical&&begin>0u&&begin<7u&&begin<end)begin=0u;
+    return begin<end?position>=begin&&position<end:begin>end&&(position>=begin||position<end);
+}
+uint window_mask(uint screen,int x,int y,uint control) {
+    if((control&0xe000u)==0u)return 63u;
+    for(uint n=0u;n<2u;++n)if((control&(0x2000u<<n))!=0u&&interval(uint(x),reg(screen,0x40u+n*2u,2u),false)&&interval(uint(y),reg(screen,0x44u+n*2u,2u),true))
+        return (reg(screen,0x48u,2u)>>(n*8u))&63u;
+    if((control&0x9000u)==0x9000u&&objects(screen,x,y,true).key!=99u)return (reg(screen,0x4au,2u)>>8u)&63u;
+    return reg(screen,0x4au,2u)&63u;
+}
+uint color_at(uint screen,int x,int y) {
+    uint control=reg(screen,0u,4u),mode=(control>>16u)&3u;
+    if((control&128u)!=0u||mode==0u)return 32767u;
+    uint color=0u;
+    if(mode==2u&&screen==0u)color=memory(0x06800000u+((control>>18u)&3u)*0x20000u+uint(y*256+x)*2u,2u)&32767u;
+    else if(mode==1u) {
+        uint mask=window_mask(screen,x,y,control);
+        Pixel first=Pixel(palette_at(screen*1024u),99u,5u,false,31u),second=first;uint count=1u;
+        for(uint bg=0u;bg<4u;++bg)if((mask&(1u<<bg))!=0u&&(control&(1u<<(8u+bg)))!=0u)insert_pixel(background(screen,bg,x,y),first,second,count);
+        if((mask&16u)!=0u&&(control&0x1000u)!=0u)insert_pixel(objects(screen,x,y,false),first,second,count);
+        color=first.color;uint blend=reg(screen,0x50u,2u),effect=(blend>>6u)&3u;
+        bool geometry_alpha=first.kind==0u&&first.alpha<31u;
+        bool selected=(blend&(1u<<first.kind))!=0u,alpha=first.semi||geometry_alpha||(selected&&effect==1u);
+        if((mask&32u)!=0u&&alpha&&count>1u&&(blend&(1u<<(8u+second.kind)))!=0u) {
+            uint factors=reg(screen,0x52u,2u),a=min(factors&31u,16u),b=min((factors>>8u)&31u,16u);color=0u;
+            uint divisor=16u;if(geometry_alpha) {a=first.alpha+1u;b=31u-first.alpha;divisor=32u;}
+            for(uint n=0u;n<3u;++n)color|=min((((first.color>>(n*5u))&31u)*a+((second.color>>(n*5u))&31u)*b)/divisor,31u)<<(n*5u);
+        } else if((mask&32u)!=0u&&!first.semi&&!geometry_alpha&&selected&&(effect==2u||effect==3u))color=brightness(color,reg(screen,0x54u,2u)&31u,effect==2u);
+    } else atomicOr(status.flags,16u);
+    uint master=reg(screen,0x6cu,2u);if((master>>14u)==1u||(master>>14u)==2u)color=brightness(color,master&31u,(master>>14u)==1u);
+    return color;
+}
+void main() {
+    uint x=gl_GlobalInvocationID.x,y=gl_GlobalInvocationID.y;
+    if(x>=256u||y>=384u)return;
+    if(state.words.length()<16||state.words[5]!=256u||state.words[6]!=192u||output_pixels.pixels.length()<256*384) {atomicOr(status.flags,512u);return;}
+    current_line=y%192u;
+    uint color=color_at(y/192u,int(x),int(y%192u)),r=color&31u,g=(color>>5u)&31u,b=(color>>10u)&31u;
+    output_pixels.pixels[y*256u+x]=(r<<3u)|(r>>2u)|(((g<<3u)|(g>>2u))<<8u)|(((b<<3u)|(b>>2u))<<16u)|0xff000000u;
+}
