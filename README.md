@@ -25,23 +25,23 @@
 
 ## About
 
-ApricotGS brings HeartGold and SoulSilver to a PS5 homebrew environment through a dedicated native player and a PC preparation tool. The PC tool statically translates the supported game's ARM9/ARM7 code into an x86-64 module. The PS5 player loads that locally generated module and supplies graphics, audio, controller, storage and save services.
+ApricotGS brings HeartGold and SoulSilver to a PS5 homebrew environment through a dedicated native player. Version 0.2.23 includes the same console-local static preparation and gameplay fixes as the accepted v0.2.23 tester: supply your own supported NDS dump and the PS5 prepares it on first use. A PC Builder is not required to play this release.
 
 The project uses a native static execution path. It does not use an ARM interpreter or JIT fallback. Unsupported code paths can stop with an explicit error instead of silently switching execution methods.
 
-**Bring your own legally obtained `.nds` dump.** The download contains no game ROM, reconstructed game source, generated game module, BIOS, firmware, extracted game graphics, music or save files. All game-derived preparation stays on your own PC and console.
+**Bring your own legally obtained `.nds` dump.** The download contains no game ROM, reconstructed game source, generated game module, BIOS, firmware, extracted game graphics, music or save files. All game-derived preparation stays on your own console or optional local PC tools.
 
 ## Status and availability
 
 Get application packages and the matching PC preparation tool from [GitHub Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases). Published releases will include checksums and their known issues.
 
-**[v0.0.2](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.0.2) is an experimental bug-fix release.** Download the PS5 player and matching PC Builder and Source packages together. Prospero Store availability is separate from GitHub publication: check the live Store listing before attempting a Store installation. Known gameplay errors are listed below.
+**[v0.2.23](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.2.23) is the current experimental console release.** The complete version-by-version fix history is in the GitHub Release description. ProsperoStore links to the same release and exact application download.
 
 The application title is **ApricotGS**. Prerelease status is recorded in release metadata, not added to the PS5 title name.
 
 ## Features
 
-- **Two editions, one app.** HeartGold and SoulSilver have separate prepared folders. With both present, choose an edition in the animated 3D cartridge launcher; with one present, it is selected automatically.
+- **Two editions, one app.** Both supported editions are prepared locally on PS5 and have separate prepared folders. With both present, choose an edition in the animated 3D cartridge launcher; with one present, it is selected automatically.
 - **Edition-specific presentation.** Cartridge labels and title music are generated locally from the matching game data, rather than bundled in the download.
 - **DualSense controls.** Graphical PlayStation button prompts, analog movement and a touchscreen pointer controlled with the right stick and R2.
 - **Two-screen layout.** A large main screen, a secondary touchscreen view and an original ApricotGS background.
@@ -55,76 +55,42 @@ The application title is **ApricotGS**. Prerelease status is recorded in release
 | --- | --- |
 | Console | A homebrew-enabled PS5 with a compatible native-app environment and Prospero Store |
 | Game data | Your own supported, unmodified HeartGold or SoulSilver `.nds` dump |
-| Preparation PC | Ubuntu 24.04 x86-64, or Ubuntu 24.04 under WSL2 |
-| Build tools | LLVM/Clang 18, LLD, a C++ build environment and glslang-tools |
-| Media preparation | Python 3.12, Pillow, NumPy, Vulkan headers/loader and Mesa's Lavapipe driver |
+| First setup | Launch once to create the persistent ROM inbox, copy your dump there, then restart |
 | Transfer | A local file-transfer service on the PS5 |
+
+PC preparation is optional for this release. Developers building the corresponding source need the pinned PS5 homebrew toolchain and Vulkan dependencies referenced in the source and notices.
 
 An `.nds` file is a cartridge dump, not an ISO. Renaming another region or modified ROM does not make it compatible.
 
 ## Installation
 
-### 1. Install the PS5 player
+### 1. Install ApricotGS
 
-Once the downloadable entry is live, install **ApricotGS** from Prospero Store. The player itself contains no game. Its title ID is `PPSA99429`.
+Install **ApricotGS v0.2.23** from ProsperoStore or extract the release's PS5 ZIP into `/data/homebrew/`. The normal application title is ApricotGS, title ID `PPSA99429`; it has no Update Tester suffix. No game is included.
 
-Keep the application installation separate from the prepared game directories described below. Do not place ROMs or saves inside an application ZIP or redistribute a populated installation.
+### 2. Add your own game
 
-### 2. Prepare your own game on PC
-
-Use the PC preparation tool supplied with the same release. It verifies the game code, maker code, revision and full ROM fingerprint before selecting a translation profile.
-
-For Ubuntu / WSL2, install the required tools and create a Python environment:
-
-```bash
-sudo apt install clang-18 lld-18 build-essential glslang-tools \
-  libvulkan-dev mesa-vulkan-drivers python3-venv
-python3 -m venv .venv
-.venv/bin/pip install Pillow==11.3.0 numpy==2.3.4
-```
-
-From the extracted preparation package:
-
-```bash
-.venv/bin/python tools/apricot-prepare.py \
-  "/path/to/your-own-game.nds" "/path/to/private-preparation" --jobs 4
-```
-
-Choose a **new output directory** for each preparation. Existing output is not overwritten. The process extracts the required data, statically compiles the native module, and generates the matching title label and menu music locally. Initial compilation can take some time.
-
-For updates containing compiler or translation-profile fixes, prepare your original dump again with the new release's PC tool and transfer the complete new edition folder. Updating the PS5 player alone does not change an already prepared native module. Preserve your existing save directory when replacing prepared game files.
-
-The preparation result identifies the transfer folder and destination. Keep the complete preparation private: it contains material derived from your game dump.
-
-### 3. Transfer the prepared edition
-
-Copy the contents of the tool's edition folder to the matching location:
+Launch once, then exit with Options if no game is present. Copy your supported, unmodified `.nds` dump into the persistent input folder:
 
 ```text
-/data/orqenva/games/
-├── heartgold/
-│   ├── edition.bin
-│   ├── game-data.bin
-│   ├── game-203.oqgame
-│   ├── identity-refs.bin
-│   ├── title-label.rgba
-│   └── title-menu.pcm
-└── soulsilver/
-    ├── edition.bin
-    ├── game-data.bin
-    ├── game-203.oqgame
-    ├── identity-refs.bin
-    ├── title-label.rgba
-    └── title-menu.pcm
+/data/apricotgs-roms/
 ```
 
-Use the folder produced for that exact edition. A copied or renamed module from the other edition will not pass identity checks. The `orqenva` data path is retained for compatibility with existing private installations; the displayed application name is ApricotGS.
+The filename may be chosen freely; compatibility is checked using game code, maker code, revision and the complete ROM fingerprint. The folder survives application replacement. Keep the original dump and do not share it.
 
-### 4. Launch and play
+### 3. Let the PS5 prepare it
 
-Start ApricotGS. If both complete editions are present, select the cartridge you want and confirm with Cross. If only one is prepared, that edition is selected automatically. Cartridge labels and menu audio correspond to the selected edition.
+Restart ApricotGS. Static native preparation, startup validation, cartridge-label creation and menu-audio creation run on the console. The progress screen shows the current phase and elapsed time. First preparation can take several minutes per edition; keep the application running until it completes. Unsupported input or execution paths produce an explicit error, with no interpreter/JIT fallback.
 
-Save through the game's own save menu. To leave the application, press **L3 + R3**. Back up your own save directory before changing installations or trying experimental versions.
+Complete game folders from older PC-prepared versions remain read-only migration inputs. This release prepares new versioned edition folders automatically when their original game data is available, leaving previous folders intact. Both editions then appear in the cartridge launcher; choose with the directional controls and start with Cross.
+
+### 4. Saves and updates
+
+Save using the game's own save menu. Production saves remain identity-based under `/data/orqenva/saves`; updating the app must not replace this directory. Back up your saves before updating. The tester's separate save namespace is not imported automatically.
+
+To exit during play, press **L3 + R3**. Store updates replace the application folder, while the persistent ROM inbox, prepared production data and saves remain separate.
+
+The optional PC tools in the source package remain available for existing workflows; they are not a requirement for console preparation.
 
 ## Compatibility
 
@@ -137,9 +103,7 @@ The current translation profiles target these **German, revision 0** editions:
 
 Do not assume US, other languages, ROM hacks or modified dumps work because their headers look similar. An identity recognised by a parser is not a promise of gameplay compatibility.
 
-Version 0.0.2 corrects DMA and card-transfer timing, ignored stores to unconnected memory banks, and native code discovery shared by both supported editions. These changes address reported missing/striped field characters, Options/frame confirmation stops and missing native targets in story, battle and sign interactions.
-
-Targeted native-PC regressions and PS5 testing have been performed; a complete campaign has not been verified. Uncovered code paths can still stop explicitly, transitions may cause loading delays, and cartridge labels may capture an animation frame instead of the title logo. Other regions and modified dumps remain unsupported. **Re-prepare your original dump with the v0.0.2 PC Builder to receive compiler/profile fixes, and preserve your save directory.**
+This is an experimental release. A complete campaign has not been verified. See the [GitHub Release description](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.2.23) for the complete fix history, tested scope and remaining limitations.
 
 Wireless trading, private rooms and online services are not supported release features.
 

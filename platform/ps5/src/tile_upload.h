@@ -20,8 +20,11 @@ inline void uploadTile(void* destination,const uint8_t* source,unsigned pitch,
         for(unsigned n=0;n<4;++n){unsigned at=order[k+n],x=bx*128+(at&127),y=by*128+(at>>7);
             if(y<output_height){
                 std::memcpy(&p[n],source+size_t(source_y[y])*pitch+size_t(source_x[x])*4,4);
-                if(background&&(p[n]>>24)==0){std::memcpy(&p[n],static_cast<const uint8_t*>(background)+(size_t(y)*3840+x)*4,4);
-                    if(bgra)p[n]=(p[n]&0xff00ff00u)|((p[n]&255u)<<16)|((p[n]>>16)&255u);
+                if(background&&(p[n]>>24)!=255){uint32_t back;std::memcpy(&back,static_cast<const uint8_t*>(background)+(size_t(y)*3840+x)*4,4);
+                    if(bgra)back=(back&0xff00ff00u)|((back&255u)<<16)|((back>>16)&255u);
+                    unsigned alpha=p[n]>>24;uint32_t mixed=0xff000000u;
+                    for(unsigned c=0;c<3;++c)mixed|=(((((p[n]>>(8*c))&255)*alpha+((back>>(8*c))&255)*(255-alpha)+127)/255)<<(8*c));
+                    p[n]=mixed;
                 }
             }
         }

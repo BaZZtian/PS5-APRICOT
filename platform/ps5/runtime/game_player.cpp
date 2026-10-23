@@ -16,14 +16,25 @@
 #include "apricot/cartridge_view.hpp"
 #include "apricot/edition_bundle.hpp"
 #include "apricot/launcher_glass.hpp"
+#include "status_screen.h"
+#include "message_box.h"
+#include "preparation_timer.h"
+#include "app_version.h"
 #include <ps5platform/libc.h>
 #include <time.h>
 #include <unistd.h>
+#include "../compiler_native/edition_prepare.h"
+#include "../compiler_native/rom_filename.h"
+#include <sys/stat.h>
+#include <dirent.h>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#define APP_DATA "/data/orqenva"
 extern "C" PFN_vkVoidFunction vk_icdGetInstanceProcAddr(VkInstance,const char*);
 namespace {
-constexpr bool detailed_runtime_logging=false;
 apricot::SupportReport support_report;
-void write_support_report(){if(!support_report.write_atomic("/data/orqenva/debug-report.json"))say("support_report_write_failed=1");}
+void write_support_report(){if(!support_report.write_atomic(APP_DATA "/debug-report.json"))say("support_report_write_failed=1");}
 bool read_data(const char *path,std::vector<uint8_t> &out,size_t maximum) {
     FILE *f=fopen(path,"rb");if(!f)return false;
     bool ok=fseek(f,0,SEEK_END)==0;long size=ok?ftell(f):-1;
@@ -39,9 +50,24 @@ void screen_copy(std::vector<uint32_t> &canvas,const std::vector<uint32_t> &pixe
     }
     for(unsigned y=0;y<height;++y)std::copy_n(scaled[screen].data()+y*width,width,canvas.data()+(top+y)*1280+left);
 }
-void information(std::vector<uint32_t> &canvas,const char *message) {
-    std::fill(canvas.begin(),canvas.end(),0xff101820);menuText(canvas,32,28,"APRICOTGS",0xffe5eeed,4,1280);
-    menuText(canvas,32,150,message,0xffc0d6d0,3,1280);
+void app_heading(std::vector<uint32_t>&canvas,bool bgra=false){
+    static std::vector<uint8_t>logo;static bool loaded=false;if(!loaded){loaded=true;read_data("/app0/userdata/header-logo.bgra",logo,80*80*4);}
+    apricot::status_logo(canvas,logo,12,2,80,bgra,80);
+    menuProportionalText(canvas,108,0,"APRICOTGS",0xffe5eeed,7,1280);
+    menuProportionalText(canvas,110,48,"v" APRICOT_VERSION,0xffe5eeed,4,1280);
+}
+void information(std::vector<uint32_t> &canvas,const char *message,bool progress=false) {
+    static std::vector<uint32_t> base,composed;static std::vector<uint8_t> background;static std::string previous;static bool previous_progress=false;
+    if(base.empty()){if(read_data("/app0/userdata/launcher-uhd.rgba",background,3840u*2160*4)&&background.size()==3840u*2160*4)base=apricot::status_background(background,3840,2160,false);else {background.clear();base=apricot::status_background({},0,0,false);}}
+    if(composed.empty()||previous!=message||previous_progress!=progress){
+        previous=message;previous_progress=progress;composed=base;
+        if(progress){apricot::launcher_glass(composed,background,3840,2160,20,180,1260,590,false);menuProportionalText(composed,48,210,message,0xff382c11,3);}
+        else {auto box=apricot::message_box(message);apricot::launcher_glass(composed,background,3840,2160,box.left,box.top,box.left+box.width,box.top+box.height,false);
+            int y=box.top+(box.height-int(box.lines.size())*36)/2;
+            for(auto&line:box.lines){menuProportionalText(composed,640-menuTextWidth(line)/2,y,line,background.empty()?0xffe5eeed:0xff382c11,3);y+=36;}
+        }
+    }
+    canvas=composed;app_heading(canvas);
     apricot::controller_icon(canvas,1280,720,32,626,apricot::ControlIcon::Options);
     menuText(canvas,84,640,"BEENDEN",0xffc0d6d0,2,1280);
 }
@@ -54,6 +80,71 @@ int stopped(Ps5GpuDisplay &display,std::vector<uint32_t> &canvas,const char *mes
 }
 int main() {
     platform_init("ApricotGS");write_support_report();pad_open();Ps5GpuDisplay display;std::vector<uint32_t> canvas(1280*720);
+    bool control_enabled=false;
+    say("ui_font=%s baseline=%u",apricotFontName,apricotFontBaseline);
+    information(canvas,"APRICOTGS v" APRICOT_VERSION " - WIRD GELADEN");
+    display.present(canvas.data(),1280,720,1280*4,stderr,nullptr);
+    struct Progress {
+        Ps5GpuDisplay*display;std::vector<uint32_t>*canvas;
+        std::mutex lock;apricot::aot::PreparationProgress snapshot{"VORBEREITUNG"};std::atomic<bool>cancelled{false};apricot::PreparationTimer timer;
+        static bool publish(void*context,const apricot::aot::PreparationProgress&p){auto&s=*static_cast<Progress*>(context);{std::lock_guard<std::mutex> guard(s.lock);s.snapshot=p;}return !s.cancelled.load();}
+        static bool update(void*context,const apricot::aot::PreparationProgress&p){
+            auto&s=*static_cast<Progress*>(context);const char*message=p.phase;
+            if(!strcmp(message,"discover"))message="SPIELDATEN WERDEN ANALYSIERT";
+            else if(!strcmp(message,"compile")||!strcmp(message,"compile-state"))message="NATIVES SPIEL WIRD ERSTELLT";
+            else if(!strcmp(message,"validate")||!strcmp(message,"validated"))message="SPIELSTART WIRD GEPRUEFT";
+            else if(!strcmp(message,"VERIFY ROM"))message="EIGENE ROM WIRD GEPRUEFT";
+            else if(!strcmp(message,"TITLE IMAGE AND MUSIC"))message="TITELBILD UND MUSIK WERDEN ERSTELLT";
+            else if(!strcmp(message,"VERIFY AND COMMIT"))message="VORBEREITUNG WIRD GESICHERT";
+            else if(!strcmp(message,"READY"))message="SPIEL IST BEREIT";
+            information(*s.canvas,message,true);
+            char line[96];snprintf(line,sizeof(line),"v%s - STATE %u - FRAME %llu",APRICOT_VERSION,p.state,(unsigned long long)p.frame);
+            menuText(*s.canvas,32,280,line,0xff382c11,2,1280);
+            menuText(*s.canvas,32,450,"EINMALIGE EINRICHTUNG - BITTE WARTEN",0xff382c11,2,1280);
+            auto timing=s.timer.update(now_seconds(),p.phase,p.state,p.frame);char time_text[112];
+            if(timing.ready)snprintf(time_text,sizeof(time_text),"FERTIG - DAUER %u S",timing.elapsed);
+            else if(timing.estimated)snprintf(time_text,sizeof(time_text),"VERGANGEN %u S - RESTZEIT EDITION CA. %u S",timing.elapsed,timing.remaining);
+            else snprintf(time_text,sizeof(time_text),"VERGANGEN %u S - RESTZEIT WIRD BERECHNET",timing.elapsed);
+            menuText(*s.canvas,32,490,time_text,0xff382c11,2,1280);
+            for(unsigned y=340;y<356;++y)std::fill_n(s.canvas->data()+y*1280+32,1216u*std::min(uint64_t(16000),p.frame)/16000,0xff65b8ec);
+            unsigned marker=unsigned(std::fmod(now_seconds()*180,1120.0));
+            for(unsigned y=370;y<376;++y)std::fill_n(s.canvas->data()+y*1280+32+marker,96,0xff65b8ec);
+            pad input{};pad_poll(&input);return !(input.pressed&PAD_OPTIONS)&&!s.display->present(s.canvas->data(),1280,720,1280*4,stderr,nullptr);
+        }
+    }progress{&display,&canvas};
+    auto directory=[](const char*path){struct stat s{};if(!mkdir(path,0700))return true;return errno==EEXIST&&!lstat(path,&s)&&S_ISDIR(s.st_mode);};
+    if(!directory(APP_DATA)||!directory(APP_DATA "/games")||!directory(APP_DATA "/roms")||!directory(APP_DATA "/saves"))return stopped(display,canvas,"DATENORDNER NICHT VERFUEGBAR");
+    if(!mkdir("/data/apricotgs-roms",0777)){
+        if(chmod("/data/apricotgs-roms",0777))return stopped(display,canvas,"ROM EINGABEORDNER NICHT VERFUEGBAR");
+    }else {struct stat input_dir{};if(errno!=EEXIST||lstat("/data/apricotgs-roms",&input_dir)||!S_ISDIR(input_dir.st_mode))return stopped(display,canvas,"ROM EINGABEORDNER NICHT VERFUEGBAR");}
+    std::vector<std::string> inputs;
+    // Keep user ROM inputs in a persistent transfer-visible inbox; generated
+    // editions and identity-based saves remain in the production data namespace.
+    for(const char*folder:{"/data/apricotgs-roms",APP_DATA "/roms","/app0/roms"}) {
+        if(DIR*dir=opendir(folder)){while(auto*entry=readdir(dir)){std::string name=entry->d_name;if(apricot::aot::is_rom_filename(name))inputs.push_back(std::string(folder)+"/"+name);}closedir(dir);}
+    }
+    // Existing owner dumps are read-only migration INPUTS, never save/module sources.
+    // Merge per-edition legacy inputs even when only the other edition is
+    // supplied in the inbox; otherwise adding SoulSilver would hide HeartGold.
+    for(const char*path:{APP_DATA "/games/heartgold/game-data.bin",APP_DATA "/games/soulsilver/game-data.bin","/data/orqenva/games/heartgold/game-data.bin","/data/orqenva/games/soulsilver/game-data.bin"})if(!access(path,R_OK))inputs.push_back(path);
+    for(const auto&input:inputs){
+        FILE*f=fopen(input.c_str(),"rb");uint8_t header[32]{};bool header_ok=f&&fread(header,1,32,f)==32;if(f)fclose(f);
+        if(!header_ok||(memcmp(header+12,"IPKD",4)&&memcmp(header+12,"IPGD",4)))return stopped(display,canvas,"ROM IDENTITAET NICHT UNTERSTUETZT");
+        // New HG profile generation preserves the previous edition and saves.
+        // Existing r1 modules cannot acquire newly compiled targets by an app update.
+        std::string destination=std::string(APP_DATA "/games/")+(header[14]=='K'?"heartgold-r7":"soulsilver-r5");
+        if(!access((destination+"/edition.bin").c_str(),F_OK))continue;
+        NativeGameVideo capture;auto loader=reinterpret_cast<PFN_vkGetInstanceProcAddr>(vk_icdGetInstanceProcAddr);
+        if(!capture.initialize(loader,oq_tiles,sizeof(oq_tiles),oq_geometry,sizeof(oq_geometry),oq_geometry_resolve,sizeof(oq_geometry_resolve)))return stopped(display,canvas,capture.error.c_str());
+        std::string error;bool ready=false;std::atomic<bool>done{false};progress.timer.reset(now_seconds());
+        std::thread worker([&]{ready=apricot::aot::prepare_edition(input.c_str(),destination.c_str(),capture,Progress::publish,&progress,error);done.store(true);});
+        while(!done.load()){
+            apricot::aot::PreparationProgress current;{std::lock_guard<std::mutex> guard(progress.lock);current=progress.snapshot;}
+            if(!Progress::update(&progress,current))progress.cancelled.store(true);
+            usleep(16000);
+        }worker.join();
+        capture.geometry.close();capture.tiles.close();if(!ready)return stopped(display,canvas,error.c_str());
+    }
     std::vector<uint8_t> artwork;
     bool native_art=read_data("/app0/userdata/launcher-uhd.rgba",artwork,3840u*2160u*4u)&&artwork.size()==3840u*2160u*4u;
     if(native_art){display.set_background(std::move(artwork));std::fill(canvas.begin(),canvas.end(),0);}
@@ -62,7 +153,10 @@ int main() {
     else if(!art)information(canvas,"BACKGROUND MISSING");
     struct Edition {std::string folder;apricot::EditionBundle bundle;std::vector<uint32_t> label;};
     std::vector<Edition> editions;
-    for(const char* folder:{"/data/orqenva/games/active","/data/orqenva/games/heartgold","/data/orqenva/games/soulsilver"}) {
+    for(const char* folder:{APP_DATA "/games/active",
+        APP_DATA "/games/heartgold-r7",
+        APP_DATA "/games/soulsilver-r5"
+        }) {
         std::vector<uint8_t> meta,label,code;apricot::EditionBundle bundle;
         std::string base=folder;
         if(!read_data((base+"/edition.bin").c_str(),meta,256))continue;
@@ -80,7 +174,7 @@ int main() {
         for(const auto& e:editions)if(e.bundle.gold()==bundle.gold())return stopped(display,canvas,"MEHRERE DATENSAETZE DERSELBEN EDITION");
         Edition e;e.folder=base;e.bundle=bundle;e.label.resize(256*192);memcpy(e.label.data(),label.data(),label.size());editions.push_back(std::move(e));
     }
-    if(editions.empty())return stopped(display,canvas,"KEINE VORBEREITETE EDITION - PC TOOL NUTZEN");
+    if(editions.empty())return stopped(display,canvas,"KEINE EDITION - EIGENE NDS IN ROMS ABLEGEN");
     std::sort(editions.begin(),editions.end(),[](const Edition&a,const Edition&b){return a.bundle.gold()>b.bundle.gold();});
     apricot::CartridgeView cartridge;std::vector<uint8_t> mesh;
     if(!read_data("/app0/userdata/cartridge.mesh",mesh,2*1024*1024)||!cartridge.load(mesh))return stopped(display,canvas,"CARTRIDGE MODELL FEHLT ODER IST UNGUELTIG");
@@ -111,15 +205,19 @@ int main() {
     say("cartridge_launcher editions=%zu selected=%.4s automatic_selection=%u native_mesh=1",editions.size(),editions[selected].bundle.identity,editions.size()==1);
     say("launcher_background=%s native_background=%u music=%s",art?"loaded":"missing",native_art,menu_started?"private-title-pcm":"not_prepared");
     support_report.phase=apricot::SupportReport::Phase::Selection;write_support_report();
-    double menu_begin=now_seconds(),navigation_after=0;float emphasis[2]={1,0};bool confirming=false;double confirm_begin=0;double menu_perf_begin=menu_begin,menu_max=0;uint64_t menu_frames=0;
+    app_heading(launcher_base,true);
+    double menu_begin=now_seconds(),navigation_after=0;bool navigation_armed=true;float emphasis[2]={1,0};bool confirming=false;double confirm_begin=0;double menu_perf_begin=menu_begin,menu_max=0;uint64_t menu_frames=0;
     for(;;){
         double frame_begin=now_seconds(),now=frame_begin,elapsed=now-menu_begin;pad p{};pad_poll(&p);
         if(p.pressed&PAD_OPTIONS){support_report.phase=apricot::SupportReport::Phase::Exit;write_support_report();if(menu_started)audio_stop();display.close(stderr);return 0;}
         int direction=0;
-        if(p.pressed&PAD_LEFT)direction=-1;else if(p.pressed&PAD_RIGHT)direction=1;
-        else if(now>=navigation_after&&std::abs(p.left_x)>0.6f){direction=p.left_x>0?1:-1;navigation_after=now+0.3;}
-        if(!confirming&&direction&&editions.size()>1){double begin=now_seconds();selected=unsigned((int(selected)+direction+int(editions.size()))%int(editions.size()));menu_audio.select(selected);say("cartridge_switch selected=%.4s main_thread_us=%.1f cached_audio=1",editions[selected].bundle.identity,(now_seconds()-begin)*1000000);}
-        if(!confirming&&(p.pressed&PAD_CROSS)){confirming=true;confirm_begin=now;}
+        bool left=(p.held&PAD_LEFT)||p.left_x< -0.6f,right=(p.held&PAD_RIGHT)||p.left_x>0.6f;
+        if(!left&&!right)navigation_armed=true;
+        if(navigation_armed&&now>=navigation_after&&left!=right){direction=left?-1:1;navigation_armed=false;}
+        if(!confirming&&direction&&editions.size()>1){unsigned target=direction<0?0:unsigned(editions.size()-1);
+            if(target!=selected){double begin=now_seconds();selected=target;navigation_after=now+0.3;menu_audio.select(selected);say("cartridge_switch selected=%.4s main_thread_us=%.1f cached_audio=1",editions[selected].bundle.identity,(now_seconds()-begin)*1000000);}}
+        bool import_pending=false;
+        if(!confirming&&((p.pressed&PAD_CROSS)||control_enabled||import_pending)){confirming=true;confirm_begin=now;}
         if(confirming&&now-confirm_begin>=0.5)break;
         canvas=launcher_base;
         size_t pixels=0;
@@ -149,7 +247,7 @@ int main() {
     if(!read_data((selected_folder+"/game-data.bin").c_str(),rom,0x20000000)||!identify_owned_data(rom,identity)||
        memcmp(identity.game_code,selected_bundle.identity,4)||memcmp(identity.maker_code,selected_bundle.identity+4,2)||identity.revision!=selected_bundle.identity[6]||memcmp(identity.sha256,selected_bundle.identity+8,32))return stopped(display,canvas,"SPIELDATEN WURDEN VERAENDERT");
     editions.clear();editions.shrink_to_fit();
-    say("native_player_version=0.0.2 native_image_format=3; gameplay compatibility incomplete");
+    say("native_player_version=%s native_image_format=3; gameplay compatibility incomplete",APRICOT_VERSION);
     information(canvas,"SPIEL WIRD VORBEREITET");display.present(canvas.data(),1280,720,1280*4,stderr,nullptr);
     NativeGameModule module;NativeMachine machine;
     std::vector<uint8_t> selected_code;uint8_t code_digest[32];
@@ -165,7 +263,7 @@ int main() {
     if(refs_ready){uint8_t digest[32];oq_sha256(identity_refs.data(),identity_refs.size(),digest);refs_ready=!memcmp(digest,selected_bundle.refs_sha,32)&&load_identity_references(identity_refs,identity,machine.bus.overlays);}
     say("identity_references=%s",refs_ready?"verified":"unavailable-fallback");
     identity_refs.clear();identity_refs.shrink_to_fit();
-    NativeSaveStore saves;if(!saves.open("/data/orqenva/saves",identity,machine.bus.card.save))return stopped(display,canvas,saves.error);
+    NativeSaveStore saves;if(!saves.open(APP_DATA "/saves",identity,machine.bus.card.save))return stopped(display,canvas,saves.error);
     machine.bus.rtc.snapshot=[](void*,uint8_t *values)->bool {
         time_t now=time(nullptr);tm local{};if(!ps5_localtime_r(&now,&local))return false;
         auto bcd=[](unsigned n) {return uint8_t((n/10)*16+n%10);};
@@ -214,8 +312,8 @@ int main() {
         if(bus.raster.frames==previous) {failure="LAUFZEIT ZEITLIMIT";break;}
         double step_seconds=now_seconds()-step_begin;
         ++perf_frames;perf_sim+=step_seconds;perf_sim_max=std::max(perf_sim_max,step_seconds);
-        if(detailed_runtime_logging&&step_seconds>0.1&&now_seconds()-last_step_warning>2) {last_step_warning=now_seconds();say("slow_native_frame frame=%llu ms=%.1f quanta=%u save_write_bytes=%llu identity_checks=%llu hash_bytes=%llu",(unsigned long long)bus.raster.frames,step_seconds*1000,quanta,(unsigned long long)bus.card.save.write_bytes,(unsigned long long)(bus.overlays.identity_checks-checks_begin),(unsigned long long)(bus.overlays.identity_hash_bytes-hash_begin));}
-        if(!audio_attempted&&audio.queued()>=NativeAudioBridge::start_samples) {audio_attempted=true;audio_started=audio_start(NativeAudioBridge::fill,&audio);}
+        if(step_seconds>0.1&&now_seconds()-last_step_warning>2) {last_step_warning=now_seconds();say("slow_native_frame frame=%llu ms=%.1f quanta=%u save_write_bytes=%llu identity_checks=%llu hash_bytes=%llu",(unsigned long long)bus.raster.frames,step_seconds*1000,quanta,(unsigned long long)bus.card.save.write_bytes,(unsigned long long)(bus.overlays.identity_checks-checks_begin),(unsigned long long)(bus.overlays.identity_hash_bytes-hash_begin));}
+        if(!control_enabled&&!audio_attempted&&audio.queued()>=NativeAudioBridge::start_samples) {audio_attempted=true;audio_started=audio_start(NativeAudioBridge::fill,&audio);}
         double save_time=now_seconds();
         if(bus.card.save.write_bytes!=last_save_bytes) {last_save_bytes=bus.card.save.write_bytes;last_save_write=save_time;}
         if(bus.card.save.dirty&&!bus.card.save.selected&&save_time-last_save_write>=0.5) {
@@ -233,35 +331,29 @@ int main() {
         if(!video.render(bus)) {say("video fail: %s",video.error.c_str());failure="BILDDARSTELLUNG NOCH UNVOLLSTAENDIG";break;}
         double render_seconds=now_seconds()-render_begin;
         perf_render+=render_seconds;double compose_begin=now_seconds();
-        if(detailed_runtime_logging&&render_seconds>0.1&&now_seconds()-last_step_warning>2) {last_step_warning=now_seconds();say("slow_render frame=%llu ms=%.1f geometry_frame=%llu",(unsigned long long)bus.raster.frames,render_seconds*1000,(unsigned long long)bus.raster_geometry_frame);}
+        if(render_seconds>0.1&&now_seconds()-last_step_warning>2) {last_step_warning=now_seconds();say("slow_render frame=%llu ms=%.1f geometry_frame=%llu",(unsigned long long)bus.raster.frames,render_seconds*1000,(unsigned long long)bus.raster_geometry_frame);}
         canvas=field_base;
-        menuText(canvas,16,16,"APRICOTGS",0xffc0d6d0,3,1280);
-        unsigned top=(bus.power_control[0]&0x8000)?0:1;screen_copy(canvas,video.pixels,top,16,64,800,600);screen_copy(canvas,video.pixels,1-top,832,64,432,324);
+        app_heading(canvas);
+        unsigned top=(bus.power_control[0]&0x8000)?0:1;screen_copy(canvas,video.pixels,top,16,88,800,600);screen_copy(canvas,video.pixels,1-top,832,64,432,324);
         int cursor_x=int((832+input.touch_x*432/256)*3),cursor_y=int((64+input.touch_y*324/192)*3);
         double present_begin=now_seconds();perf_compose+=present_begin-compose_begin;
         if(display.present(canvas.data(),1280,720,1280*4,stderr,nullptr,false,cursor_x,cursor_y)) {failure="BILDAUSGABE ANGEHALTEN";break;}
         perf_present+=now_seconds()-present_begin;++perf_presents;
         double perf_now=now_seconds(),perf_window=perf_now-perf_begin;
-        if(detailed_runtime_logging&&perf_window>=2){
+        if(perf_window>=2){
             say("frame_cost simulation_fps=%.1f presentation_fps=%.1f geometry_fps=%.1f skipped=%llu sim_ms=%.2f sim_max_ms=%.2f render_ms=%.2f compose_ms=%.2f present_ms=%.2f audio_queued=%u",
                 perf_frames/perf_window,perf_presents/perf_window,(bus.geometry.swaps-perf_geometry)/perf_window,(unsigned long long)perf_skips,
                 perf_sim*1000/perf_frames,perf_sim_max*1000,perf_render*1000/perf_presents,perf_compose*1000/perf_presents,perf_present*1000/perf_presents,audio.queued());
             perf_begin=perf_now;perf_sim=perf_sim_max=perf_render=perf_compose=perf_present=0;
             perf_frames=perf_presents=perf_skips=0;perf_geometry=bus.geometry.swaps;
         }
-        if(detailed_runtime_logging&&(shown++%120)==0)say("game_frame=%llu geom_swaps=%llu vertices=%llu pc9=%08x pc7=%08x audio_underruns=%u audio_queued=%u audio_starvations=%u audio_overruns=%u audio_render_skips=%llu",
-            static_cast<unsigned long long>(bus.raster.frames),static_cast<unsigned long long>(bus.geometry.swaps),static_cast<unsigned long long>(bus.geometry.vertices),machine.cpus[0].r[15],machine.cpus[1].r[15],audio.underruns.load(),audio.queued(),audio.starvations.load(),audio.overruns.load(),(unsigned long long)audio_render_skips);
         deadline+=double(HostVideoClock::frame_cycles)/33513982.0;double now=now_seconds();
         if(audio_started&&audio.queued()<NativeAudioBridge::low_samples)deadline=now;
         else if(deadline>now)usleep(unsigned((deadline-now)*1000000));else if(now-deadline>0.25)deadline=now;
     }
     if(audio_started)audio_stop();if(!saves.flush(bus.card.save))failure="SPIELSTAND KONNTE NICHT GESICHERT WERDEN";
-    say("native_player_end frames=%llu pc9=%08x stop9=%u cpsr9=%08x fault9=%08x pc7=%08x stop7=%u cpsr7=%08x fault7=%08x reason=%s",
-        static_cast<unsigned long long>(bus.raster.frames),machine.cpus[0].r[15],machine.stops[0],machine.cpus[0].cpsr,machine.cpus[0].fault,
-        machine.cpus[1].r[15],machine.stops[1],machine.cpus[1].cpsr,machine.cpus[1].fault,failure?failure:"controller exit");
+    say("native_player_end frames=%llu reason=%s",static_cast<unsigned long long>(bus.raster.frames),failure?failure:"controller exit");
     support_report.frames=bus.raster.frames;support_report.stop9=machine.stops[0];support_report.stop7=machine.stops[1];
     support_report.phase=failure?apricot::SupportReport::Phase::Stopped:apricot::SupportReport::Phase::Exit;write_support_report();
-    if(failure)for(unsigned n=0;n<bus.overlays.count;++n)if(bus.overlays.resident[n])
-        say("native_resident core=%u overlay=%u base=%08x bytes=%u",bus.overlays.catalog[n].core,bus.overlays.catalog[n].id,bus.overlays.catalog[n].base,bus.overlays.catalog[n].bytes);
     if(failure)return stopped(display,canvas,failure);display.close(stderr);return 0;
 }

@@ -36,7 +36,7 @@ struct PreparedMenuMixer {
  static void fill(int16_t* output,int count,void* context){
    auto& m=*static_cast<PreparedMenuMixer*>(context);
    unsigned next=m.requested.load(std::memory_order_acquire);
-   if(next!=m.active){m.previous=m.active;m.active=next;m.tracks[next].cursor=0;m.transition=0;}
+   if(next!=m.active){m.previous=m.active;m.active=next;m.transition=0;}
    PreparedMenuAudio::fill(output,count,&m.tracks[m.active]);
    for(int n=0;n<count&&m.transition<1024;++n,++m.transition){
      int16_t old[2]{};PreparedMenuAudio::fill(old,1,&m.tracks[m.previous]);

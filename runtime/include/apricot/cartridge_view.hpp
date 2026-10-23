@@ -38,7 +38,7 @@ public:
         // First stand the cartridge on its lowest physical corner, then spin
         // around the world vertical through that corner (not the local edge).
         pivot={0,INFINITY,0};constexpr float d=0.7071067812f;
-        for(const auto& item:v){float x=(item.p[0]-middle[0])/extent,y=-(item.p[2]-middle[2])/extent;
+        for(const auto& item:v){float x=(item.p[0]-middle[0])/extent,y=(item.p[2]-middle[2])/extent;
             float tx=d*(x-y),ty=d*(x+y),tz=(item.p[1]-middle[1])/extent;
             if(ty<pivot[1])pivot={tx,ty,tz};}
         vertices=std::move(v);triangles=std::move(t);return true;
@@ -55,10 +55,10 @@ public:
         float s=std::sin(angle),c=std::cos(angle);
         constexpr float d=0.7071067812f;
         for(auto& v:vertices){
-            float x=(v.p[0]-middle[0])/extent,y=-(v.p[2]-middle[2])/extent,z=(v.p[1]-middle[1])/extent;
+            float x=(v.p[0]-middle[0])/extent,y=(v.p[2]-middle[2])/extent,z=(v.p[1]-middle[1])/extent;
             float tx=d*(x-y)-pivot[0],ty=d*(x+y)-pivot[1],tz=z-pivot[2];
             float rx=c*tx+s*tz,rz=-s*tx+c*tz,q=1.f/(2.6f-rz);
-            float nx=d*(v.n[0]+v.n[2]),ny=d*(v.n[0]-v.n[2]),nz=v.n[1];
+            float nx=d*(v.n[0]-v.n[2]),ny=d*(v.n[0]+v.n[2]),nz=v.n[1];
             float light=0.58f+0.42f*std::max(0.f,0.25f*(c*nx+s*nz)+0.85f*(-s*nx+c*nz)+0.3f*ny);
             points.push_back({cx+rx*q*size*2.6f,cy-ty*q*size*2.6f,q,v.uv[0]*q,v.uv[1]*q,light});
         }
@@ -86,7 +86,7 @@ public:
                 if(t.material==2&&gold)color=0xff3c9fce;
                 if(t.material==4&&label.size()==256*192){float u=(wa*a.u+wb*b.u+wc*d.u)/q,v=(wa*a.v+wb*b.v+wc*d.v)/q;
                     unsigned tx=unsigned(std::clamp(u,0.f,1.f)*255),ty=unsigned(std::clamp(v,0.f,1.f)*191);color=label[ty*256+tx];}
-                float light=std::clamp(wa*a.light+wb*b.light+wc*d.light,0.3f,1.15f);uint32_t lit=0xff000000;
+                float light=t.material==4?1.f:std::clamp(wa*a.light+wb*b.light+wc*d.light,0.3f,1.15f);uint32_t lit=0xff000000;
                 for(unsigned k=0;k<3;++k)lit|=uint32_t(std::min(255.f,float((color>>(k*8))&255)*light))<<(k*8);
                 // Title captures are RGBA8, whereas the PS5 launcher canvas is BGRA8.
                 if(output_bgra)lit=(lit&0xff00ff00u)|((lit&255u)<<16)|((lit>>16)&255u);

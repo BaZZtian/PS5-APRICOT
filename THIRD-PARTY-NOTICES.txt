@@ -90,3 +90,7 @@ in licenses/Mesa-COPYRIGHTS.txt.
 Modified for ApricotGS on 2026-10-21/22: dedicated static game preparation,
 module integration, launcher/assets, controller/save/audio adaptation and
 release privacy controls. Upstream copyrights and licenses are retained.
+
+Oxanium font and generated glyph atlas
+  Copyright: the Oxanium Project Authors. SIL Open Font License 1.1.
+  Font and license: assets/fonts/oxanium/Oxanium.ttf and OFL.txt.

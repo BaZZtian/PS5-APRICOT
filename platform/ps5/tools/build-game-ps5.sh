@@ -7,19 +7,23 @@ upstream=${ORQENVA_VULKAN_ROOT:?Set ORQENVA_VULKAN_ROOT to the pinned independen
 sdk=$upstream/.deps/native/ps5-payload-sdk
 archive=$upstream/.deps/native/radv-release/lib/libvulkan_radeon.ps5.a
 tool=$upstream/build/host/ps5-native-tool
-work=$root/build-game-ps5
-app=$root/dist/PPSA99429
+work=${APRICOT_BUILD_DIR:-$root/build-game-ps5}
+app=${APRICOT_APP_DIR:-$root/dist/PPSA99429}
 [[ $(cat "$sdk/.ps5-sdk-revision") == b83202be73e930050e00de0f1b4d9ec46c0391bf ]]
 [[ $(sha256sum "$archive" | cut -d ' ' -f 1) == e70481a732a468cb6145347d8815ea06abd6a00e6e1978b7f9ab190aa17b75fe ]]
 mkdir -p "$work/obj" "$work/gen" "$work/stubs" "$app/sce_sys" "$app/sce_module"
 export PS5_PAYLOAD_SDK=$sdk
 export PS5_CLANG=${PS5_CLANG:-/usr/lib/llvm-18/bin/clang}
+if [[ -n ${APRICOT_SHADER_HEADER:-} ]]; then
+ cp "$APRICOT_SHADER_HEADER" "$work/gen/game_shaders.h"
+else
 glslang=${GLSLANG:-glslangValidator}
 : > "$work/gen/game_shaders.h"
 for name in tiles geometry geometry_resolve; do
  "$glslang" -V --target-env vulkan1.1 --vn "oq_$name" "$root/runtime/shaders/$name.comp" -o "$work/gen/$name.h" > /dev/null
  cat "$work/gen/$name.h" >> "$work/gen/game_shaders.h"
 done
+fi
 compile() {
  local source=$1 destination=$2 language=$3
  sh "$root/tools/cc-init-array.sh" sh "$root/tools/prospero-clang18" "-std=$language" -O2 -g1 \
@@ -27,7 +31,7 @@ compile() {
   -I "$upstream/.deps/native/radv-release/include" -fno-exceptions -fno-rtti -c "$source" -o "$destination"
 }
 objects=()
-for source in runtime/game_player.cpp runtime/game_module.cpp runtime/vulkan_tiles.cpp runtime/ps5_files.c src/display.cpp \
+for source in ${APRICOT_MAIN:-runtime/game_player.cpp} ${APRICOT_EXTRA_SOURCES:-compiler_native/aot_backend.cpp compiler_native/rom_prepare.cpp compiler_native/code_discovery.cpp compiler_native/initialization_trace.cpp compiler_native/preparation_session.cpp compiler_native/edition_prepare.cpp} runtime/game_module.cpp runtime/vulkan_tiles.cpp runtime/ps5_files.c src/display.cpp \
  src/platform.c src/shims.c tooling/native/app_crt.cpp tooling/native/app_cpp_runtime.cpp; do
  object=$work/obj/$(basename "$source").o;language=c++17
  [[ $source == *.c ]] && language=c11
@@ -59,15 +63,17 @@ cp "$upstream/runtime/libc.prx" "$app/sce_module/"
 cp "$root/../../sce_sys/icon0.png" "$app/sce_sys/"
 mkdir -p "$app/licenses"
 cp "$root/../../assets/controller/NOTICE.md" "$app/licenses/controller-art-NOTICE.md"
-"${PYTHON:-python3}" "$root/../../assets/prepare-ui.py" "$app"
+cp "$root/../../assets/fonts/oxanium/OFL.txt" "$app/licenses/Oxanium-OFL.txt"
+mkdir -p "$app/userdata"
+cp "$root/../../assets/branding/header-logo.bgra" "$app/userdata/header-logo.bgra"
 python3 - "$root" "$app" <<'PY'
 import json,sys
 from pathlib import Path
 root,app=map(Path,sys.argv[1:]);p=json.loads((root/'../../sce_sys/param.json').read_text())
-p.update(titleId='PPSA99429',conceptId='99429',contentId='UP9000-PPSA99429_00-APRICOTGSREADER00',contentVersion='00.005.009',targetContentVersion='00.005.009')
+p.update(titleId='PPSA99429',conceptId='99429',contentId='UP9000-PPSA99429_00-APRICOTGSREADER00',contentVersion='00.020.023',targetContentVersion='00.020.023')
 p.setdefault('pubtools',{})['loudnessSnd0']='-28.00'
 for record in p['localizedParameters'].values():
  if isinstance(record,dict):record['titleName']='ApricotGS'
 (app/'sce_sys/param.json').write_text(json.dumps(p,indent=2)+'\n')
-print('PS5_PLAYER_BUILD',app,'ApricotGS 0.0.2; no game data included; this build is not installed automatically')
+print('PS5_PLAYER_BUILD',app,'UNRELEASED; no game data included; console execution unverified')
 PY
