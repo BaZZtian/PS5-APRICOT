@@ -28,7 +28,7 @@ struct SupportReport {
         if(game_code[4]|| (game_code[0]&&std::memcmp(game_code,"IPGD",4)&&
            std::memcmp(game_code,"IPKD",4)&&std::memcmp(game_code,"IPGE",4)&&std::memcmp(game_code,"IPKE",4)))return 0;
         const int n=std::snprintf(out,capacity,
-            "{\n  \"schema_version\": 1,\n  \"app\": \"ApricotGS\",\n  \"version\": \"0.0.1\",\n"
+            "{\n  \"schema_version\": 1,\n  \"app\": \"ApricotGS\",\n  \"version\": \"0.0.2\",\n"
             "  \"game_code\": \"%.4s\",\n  \"phase\": \"%s\",\n  \"frames\": %llu,\n"
             "  \"stop_arm9\": %u,\n  \"stop_arm7\": %u,\n  \"automatic_upload\": false\n}\n",
             game_code,phases[unsigned(phase)],static_cast<unsigned long long>(frames),stop9,stop7);

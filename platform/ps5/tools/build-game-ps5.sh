@@ -64,10 +64,10 @@ python3 - "$root" "$app" <<'PY'
 import json,sys
 from pathlib import Path
 root,app=map(Path,sys.argv[1:]);p=json.loads((root/'../../sce_sys/param.json').read_text())
-p.update(titleId='PPSA99429',conceptId='99429',contentId='UP9000-PPSA99429_00-APRICOTGSREADER00',contentVersion='00.005.008',targetContentVersion='00.005.008')
+p.update(titleId='PPSA99429',conceptId='99429',contentId='UP9000-PPSA99429_00-APRICOTGSREADER00',contentVersion='00.005.009',targetContentVersion='00.005.009')
 p.setdefault('pubtools',{})['loudnessSnd0']='-28.00'
 for record in p['localizedParameters'].values():
  if isinstance(record,dict):record['titleName']='ApricotGS'
 (app/'sce_sys/param.json').write_text(json.dumps(p,indent=2)+'\n')
-print('PS5_PLAYER_BUILD',app,'ApricotGS 0.0.1; no game data included; this build is not installed automatically')
+print('PS5_PLAYER_BUILD',app,'ApricotGS 0.0.2; no game data included; this build is not installed automatically')
 PY

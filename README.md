@@ -35,7 +35,7 @@ The project uses a native static execution path. It does not use an ARM interpre
 
 Get application packages and the matching PC preparation tool from [GitHub Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases). Published releases will include checksums and their known issues.
 
-**[v0.0.1](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.0.1) is an early experimental release.** Download the PS5 player and matching PC Builder and Source packages together. Prospero Store availability is separate from GitHub publication: check the live Store listing before attempting a Store installation. Known gameplay errors are listed below.
+**[v0.0.2](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.0.2) is an experimental bug-fix release.** Download the PS5 player and matching PC Builder and Source packages together. Prospero Store availability is separate from GitHub publication: check the live Store listing before attempting a Store installation. Known gameplay errors are listed below.
 
 The application title is **ApricotGS**. Prerelease status is recorded in release metadata, not added to the PS5 title name.
 
@@ -92,6 +92,8 @@ From the extracted preparation package:
 
 Choose a **new output directory** for each preparation. Existing output is not overwritten. The process extracts the required data, statically compiles the native module, and generates the matching title label and menu music locally. Initial compilation can take some time.
 
+For updates containing compiler or translation-profile fixes, prepare your original dump again with the new release's PC tool and transfer the complete new edition folder. Updating the PS5 player alone does not change an already prepared native module. Preserve your existing save directory when replacing prepared game files.
+
 The preparation result identifies the transfer folder and destination. Keep the complete preparation private: it contains material derived from your game dump.
 
 ### 3. Transfer the prepared edition
@@ -135,7 +137,9 @@ The current translation profiles target these **German, revision 0** editions:
 
 Do not assume US, other languages, ROM hacks or modified dumps work because their headers look similar. An identity recognised by a parser is not a promise of gameplay compatibility.
 
-This is an early release project. A complete campaign has not been verified. Known problems include a reported SoulSilver stop during a house transition, transition-time frame drops/loading delays and incomplete coverage of some native targets. A previous HeartGold post-title target failure has a targeted correction; further gameplay regression testing remains necessary. The final release notes will identify the exact package's tested scope and outstanding issues.
+Version 0.0.2 corrects DMA and card-transfer timing, ignored stores to unconnected memory banks, and native code discovery shared by both supported editions. These changes address reported missing/striped field characters, Options/frame confirmation stops and missing native targets in story, battle and sign interactions.
+
+Targeted native-PC regressions and PS5 testing have been performed; a complete campaign has not been verified. Uncovered code paths can still stop explicitly, transitions may cause loading delays, and cartridge labels may capture an animation frame instead of the title logo. Other regions and modified dumps remain unsupported. **Re-prepare your original dump with the v0.0.2 PC Builder to receive compiler/profile fixes, and preserve your save directory.**
 
 Wireless trading, private rooms and online services are not supported release features.
 

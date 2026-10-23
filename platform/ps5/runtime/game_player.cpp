@@ -149,7 +149,7 @@ int main() {
     if(!read_data((selected_folder+"/game-data.bin").c_str(),rom,0x20000000)||!identify_owned_data(rom,identity)||
        memcmp(identity.game_code,selected_bundle.identity,4)||memcmp(identity.maker_code,selected_bundle.identity+4,2)||identity.revision!=selected_bundle.identity[6]||memcmp(identity.sha256,selected_bundle.identity+8,32))return stopped(display,canvas,"SPIELDATEN WURDEN VERAENDERT");
     editions.clear();editions.shrink_to_fit();
-    say("native_player_version=0.0.1 native_image_format=3; gameplay compatibility incomplete");
+    say("native_player_version=0.0.2 native_image_format=3; gameplay compatibility incomplete");
     information(canvas,"SPIEL WIRD VORBEREITET");display.present(canvas.data(),1280,720,1280*4,stderr,nullptr);
     NativeGameModule module;NativeMachine machine;
     std::vector<uint8_t> selected_code;uint8_t code_digest[32];

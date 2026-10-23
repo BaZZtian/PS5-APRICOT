@@ -16,6 +16,16 @@ struct HostCard {
     uint64_t transfers=0,read_bytes=0;
     HostSaveFlash save;
     bool ready() const {return remaining!=0;}
+    // Serialized card-bus time in the native scheduler's 66-MHz ticks.
+    // ROMCTRL selects a 33-MHz /5 or /8 byte clock. Commands use eight
+    // clocks, data words four; gap2 also precedes each 512-byte block.
+    uint64_t clock_ticks() const {return control&0x08000000u?16:10;}
+    uint64_t command_ticks() const {
+        return (8+(control&0x1fff)+(ready()?((control>>16)&63):0))*clock_ticks();
+    }
+    uint64_t data_ticks() const {
+        return ready()?(4+(position&&position%512==0?((control>>16)&63):0))*clock_ticks():0;
+    }
     void complete(uint32_t *flags) {
         control&=~0x80800000u;
         if(auxiliary&0x4000)flags[owner]|=1u<<19;

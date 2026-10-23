@@ -88,20 +88,30 @@ def discover(image, description, *, limit=12000, seeds=(), pointer_candidates=Fa
                     veneer=literal and second&0xff87 in (0x4700,0x4780) and (second>>3)&15==(first>>8)&7
                     leaf=second==0x4770 and (literal or first&0xf800==0x2000)
                     if veneer or leaf:candidates.add((begin+at,True))
+                    if veneer:
+                        for distance in range(2,min(16,at)+1,2):
+                            prefix=struct.unpack_from('<H',data,at-distance)[0]
+                            if prefix&0xfe00!=0x1c00 and prefix&0xf800 not in (0x6800,0x7800,0x8800):break
+                            candidates.add((begin+at-distance,True))
                     if literal:
                         # Tail wrappers can load their destination, set up a few
                         # immediate arguments, then branch through that register.
                         # These remain optional entry hypotheses, not a claim
                         # that every matching byte sequence is executable code.
                         destination=(first>>8)&7
-                        for distance in range(2,10,2):
+                        for distance in range(2,18,2):
                             if at+distance+2>len(data):break
                             following=struct.unpack_from('<H',data,at+distance)[0]
                             if following&0xff87 in (0x4700,0x4780):
                                 if (following>>3)&15==destination:
                                     candidates.add((begin+at,True))
                                 break
-                            if following&0xf800!=0x2000 or (following>>8)&7==destination:break
+                            immediate=following&0xf800==0x2000 and (following>>8)&7!=destination
+                            kind=following&0xf800
+                            argument_load=(kind in (0x6800,0x7800,0x8800) and following&7!=destination) or (
+                                kind==0x4800 and (following>>8)&7!=destination)
+                            argument_math=(following&0xf800==0x0000 or following&0xfe00==0x1c00) and following&7!=destination
+                            if not immediate and not argument_load and not argument_math:break
                 if first==0x4770:
                     # Small leaf callbacks can begin with shifts or loads and
                     # have no stack prologue or literal function pointer.
@@ -157,6 +167,7 @@ def discover(image, description, *, limit=12000, seeds=(), pointer_candidates=Fa
                 if register<8 and all(value is not None for value in previous[:7]):
                     asr,lsl,load,base,index,default,check,compare=previous
                     source=(index>>3)&7
+                    signed_bounds=False
                     guarded=(compare is not None and default&0xf800==0xe000 and check==0xd900 and compare&0xff00==(0x2800|(source<<8)))
                     if default&0xff00==0xd800 and check&0xff00==(0x2800|(source<<8)):
                         guarded=True;compare=check
@@ -168,17 +179,38 @@ def discover(image, description, *, limit=12000, seeds=(), pointer_candidates=Fa
                         compare is not None and compare==0xd901 and bound is not None and
                         bound&0xff00==(0x2800|(source<<8))):
                         guarded=True;compare=bound
+                    # Signed upper/lower guards, including a minus-one sentinel
+                    # biased to table slot zero. Both branches must skip the table.
+                    if (bound is not None and default&0xff00==0xdb00 and
+                        check==(0x2800|(source<<8)) and compare is not None and
+                        compare&0xff00==0xdc00 and bound&0xff00==(0x2800|(source<<8))):
+                        guarded=signed_bounds=True;compare=bound
+                    original=(check>>3)&7
+                    if (bound is not None and default&0xff00==0xd400 and
+                        check&0xfe00==0x1c00 and (check>>6)&7==1 and check&7==source and
+                        compare is not None and compare&0xff00==0xdc00 and
+                        bound&0xff00==(0x2800|(original<<8)) and bound&255<255):
+                        guarded=signed_bounds=True;compare=(bound&255)+1
+                    if signed_bounds:
+                        end=pc-4+((load>>6)&31)*2+((compare&255)+1)*2
+                        displacement=lambda value: (value&255)-256 if value&128 else value&255
+                        guarded=(pc-12+2*displacement(previous[7])>=end and
+                                 pc-8+2*displacement(default)>=end)
                     valid=(asr==(0x1400|(register<<3)|register) and lsl==(0x0400|(register<<3)|register) and
                         load&0xf83f==(0x8800|(register<<3)|register) and base==(0x4478|register) and
                         index&0xfe07==(0x1800|register) and (index>>6)&7==source and guarded)
                     if valid:
                         table=pc-4+((load>>6)&31)*2
+                        cases=[]
                         for slot in range((compare&255)+1):
                             relative=read(table+slot*2,2)
                             if relative is None or relative&1:break
                             if relative&0x8000:relative-=0x10000
                             target=(pc+4+relative)&0xffffffff
-                            if read(target,2) is not None:queue.append((target,True))
+                            if read(target,2) is None:break
+                            cases.append((target,True))
+                        else:
+                            queue.extend(cases)
             if not mode and word & 0x0ffffff0 == 0x008ff100:
                 # Native switch: ADD pc,pc,Rm,LSL #2, then a table of A32 B slots.
                 for offset in range(0,256*4,4):
@@ -227,6 +259,24 @@ def discover(image, description, *, limit=12000, seeds=(), pointer_candidates=Fa
         'static_prologue_candidates':prologue_count,
         'instruction_discovery_limit':limit,
         'complete_translation': False}
+
+def cross_image_entries(images, *, limit=12000, pointer_candidates=False, prologue_candidates=False):
+    """Close proven external branch targets across independently mapped images."""
+    roots=[set(map(tuple,entries)) for image,description,entries in images]
+    results=[discover(image,description,limit=limit,seeds=sorted(entries),pointer_candidates=pointer_candidates,prologue_candidates=prologue_candidates or description.get('cross_prologue_candidates',False))[1]
+             for (image,description,_),entries in zip(images,roots)]
+    for iteration in range(32):
+        if any(info['pending_addresses'] for info in results):raise ValueError('Cross-image instruction discovery bound reached')
+        targets={tuple(target) for info in results for target in info['external_targets']}
+        changed=False
+        for n,(image,description,_) in enumerate(images):
+            ranges=image_ranges(image,description)
+            added={t for t in targets if any(begin<=t[0] and t[0]+(2 if t[1] else 4)<=begin+len(data) for begin,data in ranges)}-roots[n]
+            if not added:continue
+            changed=True;roots[n].update(added)
+            results[n]=discover(image,description,limit=limit,seeds=sorted(roots[n]),pointer_candidates=pointer_candidates,prologue_candidates=prologue_candidates or description.get('cross_prologue_candidates',False))[1]
+        if not changed:return roots
+    raise ValueError('Cross-image discovery convergence bound reached')
 
 def generate(folder, *, limit=12000, seeds=None, output_name='native-boot', pointer_candidates=False,all_overlays=False, bootstrap_guards=()):
     folder = Path(folder).resolve()
@@ -280,6 +330,30 @@ def generate(folder, *, limit=12000, seeds=None, output_name='native-boot', poin
         selected=dict(overlay_seeds.get(name,{}))
         if all_overlays:
             for record in description['overlays']:selected.setdefault(str(record['id']),[])
+        # Propagate direct calls before emitting any image. This also covers
+        # single-return functions which have no prologue or literal pointer.
+        cross_images=[];cross_ids=[];main_cross_seeds=list(main_seeds)
+        from .static_variants import load as load_cross_variant
+        for text_id,entries in selected.items():
+            if not text_id.isdecimal() or str(int(text_id))!=text_id or not isinstance(entries,list) or (not entries and not all_overlays):raise ValueError('Invalid private overlay seeds')
+            record=next((o for o in description['overlays'] if o['id']==int(text_id)),None)
+            if record is None:raise ValueError('Unknown private overlay ID')
+            path=(folder/record['file']).resolve()
+            if folder not in path.parents:raise ValueError('Private overlay path escapes preparation')
+            data=path.read_bytes()
+            if len(data)!=record['bytes'] or digest(data)!=record['sha256']:raise ValueError('Prepared overlay changed')
+            initializers=initializer_targets(data,record)
+            local=[*entries,*[(pc,mode) for pc,mode in initializers if record['address']<=pc and pc+(2 if mode else 4)<=record['address']+len(data)]]
+            main_ranges=image_ranges(image,description)
+            main_cross_seeds.extend(t for t in initializers if any(a<=t[0] and t[0]+(2 if t[1] else 4)<=a+len(b) for a,b in main_ranges))
+            variant=load_cross_variant(folder,core,record)
+            for view in [data]+(variant[2]['loaded_states'] if variant else []):
+                desc={'ram_address':record['address'],'entry':None,'sections':[],'core':core,'cross_prologue_candidates':bool(variant)}
+                cross_images.append((view,desc,local));cross_ids.append(text_id)
+                if pointer_candidates or all_overlays:main_cross_seeds.extend(external_entry_candidates(view,image,description))
+        closure=cross_image_entries([(image,description,main_cross_seeds),*cross_images],limit=limit,pointer_candidates=pointer_candidates or all_overlays,prologue_candidates=pointer_candidates or all_overlays)
+        main_seeds=list(closure[0]);cross_roots={key:set() for key in selected}
+        for key,roots in zip(cross_ids,closure[1:]):cross_roots[key].update(roots)
         for text_id,entries in selected.items():
             if not text_id.isdecimal() or str(int(text_id))!=text_id or not isinstance(entries,list) or (not entries and not all_overlays):raise ValueError('Invalid private overlay seeds')
             record=next((o for o in description['overlays'] if o['id']==int(text_id)),None)
@@ -296,6 +370,7 @@ def generate(folder, *, limit=12000, seeds=None, output_name='native-boot', poin
             guarded_initialization=bool(variant) or (core,record['id']) in bootstrap_guards
             initializers=initializer_targets(data,record)
             entries=[*entries,*[(pc,mode) for pc,mode in initializers if record['address']<=pc and pc+(2 if mode else 4)<=record['address']+len(data)]]
+            entries=sorted(set(map(tuple,entries))|cross_roots[text_id])
             desc={'ram_address':record['address'],'entry':entries[0][0] if entries else None,'entry_thumb':entries[0][1] if entries else False,'sections':[],'core':core}
             main_ranges=[(description['ram_address'],len(image))]+[(s['address'],s['bytes']) for s in description['sections']]
             label=f'{name}_overlay{record["id"]}'

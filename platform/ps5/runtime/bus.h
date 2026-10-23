@@ -157,11 +157,12 @@ struct Bus {
             dma_running=true;G destination=registers[1]&~3u,mode=(control>>21)&3;
             do {
                 G word=0;
+                uint64_t ticks=card.data_ticks();
                 if(!card.data(word,irq_flags)||!write(this,core,destination,4,word)) {dma_running=false;return false;}
                 if(mode!=2&&mode!=3)destination+=mode==1?G(0-4):4;
                 if(control&0x40000000)irq_flags[cpu]|=1u<<(8+channel);
                 if(!(control&0x02000000))registers[2]&=~0x80000000u;
-                if(current_cpu)current_cpu->ticks+=64;
+                if(current_cpu)current_cpu->ticks+=ticks;
             } while(card.ready()&&(registers[2]&0x80000000u));
             registers[1]=destination;dma_running=false;
         }
@@ -185,7 +186,13 @@ struct Bus {
         unsigned index=core==9?0:1;
         if(core==9&&b.display.access(address,width,*value,false))return true;
         if(core==9&&b.geometry.access(address,width,*value,false,b.irq_flags[0]))return true;
-        if(bool(b.exmem9&0x800)==(core==7)&&b.card.access(index,address,width,*value,false,b.irq_flags))return true;
+        if(bool(b.exmem9&0x800)==(core==7)) {
+            uint64_t ticks=address==0x04100010&&width==4?b.card.data_ticks():0;
+            if(b.card.access(index,address,width,*value,false,b.irq_flags)) {
+                if(b.current_cpu)b.current_cpu->ticks+=ticks;
+                return true;
+            }
+        }
         if(address==0x04000130&&width==2) {*value=(~b.buttons)&0x3ff;return true;}
         if(address==0x04000132&&width==2) {*value=b.key_control[index];return true;}
         if(core==7&&address==0x04000134&&width==2) {*value=b.serial_gpio;return true;}
@@ -259,6 +266,12 @@ struct Bus {
     }
     static bool write(void *ctx,G core,G address,G width,G value) {
         auto &b=*static_cast<Bus*>(ctx);
+        // DS 16-MiB banks 0Bh..0Fh have no connected memory device. Stores
+        // complete without changing memory; neither CPU nor DMA raises a
+        // synthetic service failure here. Keep unsupported I/O writes strict.
+        // Reference: GBATEK, DS Memory Maps (Undefined Memory Regions).
+        if((core==9||core==7)&&(width==1||width==2||width==4)&&
+           address>=0x0b000000&&address<0x10000000&&width<=0x10000000-address)return true;
         // ARM7's 16-KiB boot ROM is not writable. In particular, an optional
         // status pointer of zero must not turn an ignored ROM store into a
         // fabricated machine fault. No ROM contents are provided here.
@@ -283,7 +296,10 @@ struct Bus {
         if(core==9&&b.display.access(address,width,value,true))return true;
         if(core==9&&b.geometry.access(address,width,value,true,b.irq_flags[0]))return true;
         if(bool(b.exmem9&0x800)==(core==7)&&b.card.access(index,address,width,value,true,b.irq_flags)) {
-            if(address==0x040001a4)return b.card_dma(index);
+            if(address==0x040001a4) {
+                if(b.current_cpu&&(value&0x80000000u))b.current_cpu->ticks+=b.card.command_ticks();
+                return b.card_dma(index);
+            }
             return true;
         }
         if(address==0x04000132&&width==2) {b.key_control[index]=value&0xc3ff;return true;}
@@ -350,6 +366,19 @@ struct Bus {
                     if(!read(&b,core,source,size,&data)||!write(&b,core,destination,size,data)) {b.dma_running=false;return false;}
                     source+=src_mode==0?size:src_mode==1?G(0-size):0;
                     destination+=dst_mode==1?G(0-size):dst_mode==2?0:size;
+                }
+                // RAM-to-video DMA occupies the external bus. Treating an entire
+                // asset upload as instantaneous lets guest VBlank task producers
+                // outrun their bounded queue. Account first/nonsequential and
+                // subsequent sequential accesses in 33-MHz bus units, converted
+                // to the scheduler's 66-MHz ticks. This is a coarse serialized
+                // transfer model, not a cache/arbitration-accurate DMA engine.
+                // Reference: GBATEK, DS Memory Timings and DS DMA.
+                if(core==9&&b.current_cpu&&b.current_cpu->core==core&&src_mode==0&&dst_mode==0&&
+                   registers[0]>=0x02000000&&registers[0]<0x03000000&&
+                   registers[1]>=0x06000000&&registers[1]<0x07000000) {
+                    uint64_t bus_cycles=(size==4?15u:13u)+uint64_t(count-1)*(size==4?4u:2u);
+                    b.current_cpu->ticks+=bus_cycles*2;
                 }
                 b.dma_running=false;registers[0]=source;registers[1]=dst_mode==3?saved_dest:destination;
                 registers[2]&=~0x80000000u;
