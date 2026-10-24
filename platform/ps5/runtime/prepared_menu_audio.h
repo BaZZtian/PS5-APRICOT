@@ -37,10 +37,17 @@ struct PreparedMenuMixer {
    auto& m=*static_cast<PreparedMenuMixer*>(context);
    unsigned next=m.requested.load(std::memory_order_acquire);
    if(next!=m.active){m.previous=m.active;m.active=next;m.transition=0;}
-   PreparedMenuAudio::fill(output,count,&m.tracks[m.active]);
-   for(int n=0;n<count&&m.transition<1024;++n,++m.transition){
-     int16_t old[2]{};PreparedMenuAudio::fill(old,1,&m.tracks[m.previous]);
-     for(unsigned c=0;c<2;++c)output[n*2+c]=int16_t((int32_t(old[c])*int32_t(1024-m.transition)+int32_t(output[n*2+c])*int32_t(m.transition))/1024);
+   // Both editions share the callback's elapsed time. A hidden track keeps
+   // advancing silently, including after the crossfade has completed.
+   for(int n=0;n<count;++n){
+     int16_t sample[2][2]{};
+     for(unsigned track=0;track<2;++track)PreparedMenuAudio::fill(sample[track],1,&m.tracks[track]);
+     for(unsigned c=0;c<2;++c){
+       int32_t value=sample[m.active][c];
+       if(m.transition<1024)value=(int32_t(sample[m.previous][c])*int32_t(1024-m.transition)+value*int32_t(m.transition))/1024;
+       output[n*2+c]=int16_t(value);
+     }
+     if(m.transition<1024)++m.transition;
    }
  }
 };

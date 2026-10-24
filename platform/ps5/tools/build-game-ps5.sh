@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Native development player only; never copy private user data into this title.
 set -euo pipefail
+export APRICOT_SHELL_MUSIC=1
 root=$(cd "$(dirname "$0")/.." && pwd)
 upstream=${ORQENVA_VULKAN_ROOT:?Set ORQENVA_VULKAN_ROOT to the pinned independent PS5 Vulkan source/build}
 sdk=$upstream/.deps/native/ps5-payload-sdk
@@ -26,10 +27,15 @@ done
 fi
 compile() {
  local source=$1 destination=$2 language=$3
+ local exception_flags=-fno-exceptions
+ case "$source" in */vendor/at9/*.cpp|*/runtime/title_shell_music.cpp) exception_flags=-fexceptions;; esac
  sh "$root/tools/cc-init-array.sh" sh "$root/tools/prospero-clang18" "-std=$language" -O2 -g1 \
   -ffunction-sections -fdata-sections -DOQ_PS5 -I "$root/runtime" -I "$root/src" -I "$work/gen" -I "$root/../../runtime/include" \
-  -I "$upstream/.deps/native/radv-release/include" -fno-exceptions -fno-rtti -c "$source" -o "$destination"
+  -I "$upstream/.deps/native/radv-release/include" ${APRICOT_SHELL_MUSIC:+-DAPRICOT_SHELL_MUSIC} "$exception_flags" -fno-rtti -c "$source" -o "$destination"
 }
+if [[ -n ${APRICOT_SHELL_MUSIC:-} ]];then
+ APRICOT_EXTRA_SOURCES="${APRICOT_EXTRA_SOURCES:-compiler_native/aot_backend.cpp compiler_native/rom_prepare.cpp compiler_native/code_discovery.cpp compiler_native/initialization_trace.cpp compiler_native/preparation_session.cpp compiler_native/edition_prepare.cpp} runtime/title_shell_music.cpp ../vendor/at9/at9_encoder.cpp ../vendor/at9/at9_snd0.cpp ../vendor/at9/at9_tables.cpp"
+fi
 objects=()
 for source in ${APRICOT_MAIN:-runtime/game_player.cpp} ${APRICOT_EXTRA_SOURCES:-compiler_native/aot_backend.cpp compiler_native/rom_prepare.cpp compiler_native/code_discovery.cpp compiler_native/initialization_trace.cpp compiler_native/preparation_session.cpp compiler_native/edition_prepare.cpp} runtime/game_module.cpp runtime/vulkan_tiles.cpp runtime/ps5_files.c src/display.cpp \
  src/platform.c src/shims.c tooling/native/app_crt.cpp tooling/native/app_cpp_runtime.cpp; do
@@ -70,7 +76,7 @@ python3 - "$root" "$app" <<'PY'
 import json,sys
 from pathlib import Path
 root,app=map(Path,sys.argv[1:]);p=json.loads((root/'../../sce_sys/param.json').read_text())
-p.update(titleId='PPSA99429',conceptId='99429',contentId='UP9000-PPSA99429_00-APRICOTGSREADER00',contentVersion='00.020.023',targetContentVersion='00.020.023')
+p.update(titleId='PPSA99429',conceptId='99429',contentId='UP9000-PPSA99429_00-APRICOTGSREADER00',contentVersion='00.030.005',targetContentVersion='00.030.005')
 p.setdefault('pubtools',{})['loudnessSnd0']='-28.00'
 for record in p['localizedParameters'].values():
  if isinstance(record,dict):record['titleName']='ApricotGS'

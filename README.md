@@ -25,7 +25,7 @@
 
 ## About
 
-ApricotGS brings HeartGold and SoulSilver to a PS5 homebrew environment through a dedicated native player. Version 0.2.23 includes the same console-local static preparation and gameplay fixes as the accepted v0.2.23 tester: supply your own supported NDS dump and the PS5 prepares it on first use. A PC Builder is not required to play this release.
+ApricotGS brings HeartGold and SoulSilver to a PS5 homebrew environment through a dedicated native player. Version 0.3.0 includes the same console-local static preparation and gameplay fixes as the accepted v0.3.0 tester: supply your own supported NDS dump and the PS5 prepares it on first use. A PC Builder is not required to play this release.
 
 The project uses a native static execution path. It does not use an ARM interpreter or JIT fallback. Unsupported code paths can stop with an explicit error instead of silently switching execution methods.
 
@@ -35,7 +35,7 @@ The project uses a native static execution path. It does not use an ARM interpre
 
 Get application packages and the matching PC preparation tool from [GitHub Releases](https://github.com/BaZZtian/PS5-ApricotGS/releases). Published releases will include checksums and their known issues.
 
-**[v0.2.23](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.2.23) is the current experimental console release.** The complete version-by-version fix history is in the GitHub Release description. ProsperoStore links to the same release and exact application download.
+**[v0.3.0](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.3.0) is the current experimental console release.** The complete version-by-version fix history is in the GitHub Release description. ProsperoStore links to the same release and exact application download.
 
 The application title is **ApricotGS**. Prerelease status is recorded in release metadata, not added to the PS5 title name.
 
@@ -66,7 +66,7 @@ An `.nds` file is a cartridge dump, not an ISO. Renaming another region or modif
 
 ### 1. Install ApricotGS
 
-Install **ApricotGS v0.2.23** from ProsperoStore or extract the release's PS5 ZIP into `/data/homebrew/`. The normal application title is ApricotGS, title ID `PPSA99429`; it has no Update Tester suffix. No game is included.
+Install **ApricotGS v0.3.0** from ProsperoStore or extract the release's PS5 ZIP into `/data/homebrew/`. The normal application title is ApricotGS, title ID `PPSA99429`; it has no Update Tester suffix. No game is included.
 
 ### 2. Add your own game
 
@@ -92,6 +92,19 @@ To exit during play, press **L3 + R3**. Store updates replace the application fo
 
 The optional PC tools in the source package remain available for existing workflows; they are not a requirement for console preparation.
 
+### Preparation recovery and Home music
+
+The app verifies prepared edition files and replaces damaged or older media
+transactionally when the exact supported original dump is available. Previous
+folders are retained, and saves stay separate. A completed, validated native
+module checkpoint can resume the remaining media/commit phases after restart;
+an interruption before that checkpoint requires compilation again.
+
+Home-tile music is generated from your own game data on the console. After
+preparation, close the app and allow the Home screen to refresh its title media.
+No game music is shipped. Cartridge switching crossfades continuously advancing
+title tracks rather than pausing the unselected track.
+
 ## Compatibility
 
 The current translation profiles target these **German, revision 0** editions:
@@ -103,7 +116,7 @@ The current translation profiles target these **German, revision 0** editions:
 
 Do not assume US, other languages, ROM hacks or modified dumps work because their headers look similar. An identity recognised by a parser is not a promise of gameplay compatibility.
 
-This is an experimental release. A complete campaign has not been verified. See the [GitHub Release description](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.2.23) for the complete fix history, tested scope and remaining limitations.
+This is an experimental release. A complete campaign has not been verified. See the [GitHub Release description](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.3.0) for the complete fix history, tested scope and remaining limitations.
 
 Wireless trading, private rooms and online services are not supported release features.
 

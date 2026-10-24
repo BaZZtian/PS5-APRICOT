@@ -13,6 +13,7 @@
 #include "presentation.h"
 #include "identity_reference.h"
 #include "prepared_menu_audio.h"
+#include "sha256_stream.h"
 #include "apricot/cartridge_view.hpp"
 #include "apricot/edition_bundle.hpp"
 #include "apricot/launcher_glass.hpp"
@@ -20,6 +21,9 @@
 #include "message_box.h"
 #include "preparation_timer.h"
 #include "app_version.h"
+#ifdef APRICOT_SHELL_MUSIC
+#include "title_shell_music.h"
+#endif
 #include <ps5platform/libc.h>
 #include <time.h>
 #include <unistd.h>
@@ -96,6 +100,7 @@ int main() {
             else if(!strcmp(message,"VERIFY ROM"))message="EIGENE ROM WIRD GEPRUEFT";
             else if(!strcmp(message,"TITLE IMAGE AND MUSIC"))message="TITELBILD UND MUSIK WERDEN ERSTELLT";
             else if(!strcmp(message,"VERIFY AND COMMIT"))message="VORBEREITUNG WIRD GESICHERT";
+            else if(!strcmp(message,"CHECK FOR SAFE RESUME"))message="SICHERER FORTSETZUNGSPUNKT WIRD GEPRUEFT";
             else if(!strcmp(message,"READY"))message="SPIEL IST BEREIT";
             information(*s.canvas,message,true);
             char line[96];snprintf(line,sizeof(line),"v%s - STATE %u - FRAME %llu",APRICOT_VERSION,p.state,(unsigned long long)p.frame);
@@ -127,13 +132,77 @@ int main() {
     // Merge per-edition legacy inputs even when only the other edition is
     // supplied in the inbox; otherwise adding SoulSilver would hide HeartGold.
     for(const char*path:{APP_DATA "/games/heartgold/game-data.bin",APP_DATA "/games/soulsilver/game-data.bin","/data/orqenva/games/heartgold/game-data.bin","/data/orqenva/games/soulsilver/game-data.bin"})if(!access(path,R_OK))inputs.push_back(path);
+    bool repair_required=false;
+    auto identity_matches=[](const GameIdentity&a,const uint8_t*b){return !memcmp(a.game_code,b,4)&&!memcmp(a.maker_code,b+4,2)&&a.revision==b[6]&&!memcmp(a.sha256,b+8,32);};
+    auto file_hash_matches=[](const std::string&path,const uint8_t expected[32],uint64_t maximum,uint64_t exact){
+        struct stat st{};if(lstat(path.c_str(),&st)||!S_ISREG(st.st_mode)||st.st_size<0||uint64_t(st.st_size)>maximum||(exact&&uint64_t(st.st_size)!=exact))return false;
+        FILE*f=fopen(path.c_str(),"rb");if(!f)return false;uint8_t block[65536],digest[32];OqSha256Stream sha;size_t n;uint64_t total=0;
+        while((n=fread(block,1,sizeof(block),f))){sha.update(block,n);total+=n;}bool ok=!ferror(f);if(fclose(f))ok=false;sha.digest(digest);return ok&&total==uint64_t(st.st_size)&&!memcmp(digest,expected,32);
+    };
+    auto intact_edition=[&](const std::string&base){
+        std::vector<uint8_t>meta;apricot::EditionBundle bundle;
+        return read_data((base+"/edition.bin").c_str(),meta,256)&&bundle.load(meta)&&
+           file_hash_matches(base+"/game-data.bin",bundle.identity+8,0x20000000,bundle.rom_bytes)&&
+           file_hash_matches(base+"/game-203.oqgame",bundle.module_sha,256u+256u*1024*1024+1048576u*16,0)&&
+           file_hash_matches(base+"/title-label.rgba",bundle.label_sha,256*192*4,256*192*4)&&
+           file_hash_matches(base+"/title-menu.pcm",bundle.audio_sha,64*1024*1024,0)&&
+           file_hash_matches(base+"/identity-refs.bin",bundle.refs_sha,64*1024*1024,0);
+    };
     for(const auto&input:inputs){
         FILE*f=fopen(input.c_str(),"rb");uint8_t header[32]{};bool header_ok=f&&fread(header,1,32,f)==32;if(f)fclose(f);
         if(!header_ok||(memcmp(header+12,"IPKD",4)&&memcmp(header+12,"IPGD",4)))return stopped(display,canvas,"ROM IDENTITAET NICHT UNTERSTUETZT");
         // New HG profile generation preserves the previous edition and saves.
         // Existing r1 modules cannot acquire newly compiled targets by an app update.
         std::string destination=std::string(APP_DATA "/games/")+(header[14]=='K'?"heartgold-r7":"soulsilver-r5");
-        if(!access((destination+"/edition.bin").c_str(),F_OK))continue;
+        struct stat destination_stat{};
+        std::string repair=destination+".repairing";
+        if(lstat(destination.c_str(),&destination_stat)&&errno==ENOENT&&!lstat(repair.c_str(),&destination_stat)&&S_ISDIR(destination_stat.st_mode)&&intact_edition(repair)){
+            apricot::aot::PreparedRom recovery_input;std::string recovery_error;std::vector<uint8_t>recovery_meta;apricot::EditionBundle recovery_bundle;
+            if(apricot::aot::prepare_rom_file(input.c_str(),recovery_input,recovery_error)&&read_data((repair+"/edition.bin").c_str(),recovery_meta,256)&&recovery_bundle.load(recovery_meta)&&recovery_bundle.media_revision==1&&identity_matches(recovery_input.identity,recovery_bundle.identity)){
+                if(!rename(repair.c_str(),destination.c_str())){say("edition_repair_recovered folder=%s",destination.c_str());continue;}
+            }
+            say("edition_repair_blocked folder=%s reason=orphan_repair_preserved",destination.c_str());repair_required=true;continue;
+        }
+        if(!lstat(destination.c_str(),&destination_stat)){
+            if(!S_ISDIR(destination_stat.st_mode)){say("edition_repair_blocked folder=%s reason=destination_not_directory",destination.c_str());repair_required=true;continue;}
+            bool intact=intact_edition(destination);std::vector<uint8_t>existing_meta;apricot::EditionBundle existing_bundle;
+            bool refresh_media=intact&&read_data((destination+"/edition.bin").c_str(),existing_meta,256)&&existing_bundle.load(existing_meta)&&existing_bundle.media_revision==0;
+            if(intact&&!refresh_media)continue;
+            apricot::aot::PreparedRom verified_input;std::string verify_error;
+            bool source_ok=apricot::aot::prepare_rom_file(input.c_str(),verified_input,verify_error);
+            std::vector<uint8_t>old_meta,old_rom;apricot::EditionBundle old_bundle;GameIdentity old_id{};
+            bool known_old=source_ok&&(read_data((destination+"/edition.bin").c_str(),old_meta,256)&&old_bundle.load(old_meta)&&identity_matches(verified_input.identity,old_bundle.identity));
+            if(!known_old&&read_data((destination+"/game-data.bin").c_str(),old_rom,0x20000000)&&identify_owned_data(old_rom,old_id))known_old=source_ok&&
+                !memcmp(verified_input.identity.sha256,old_id.sha256,32)&&!memcmp(verified_input.identity.game_code,old_id.game_code,4)&&verified_input.identity.revision==old_id.revision;
+            if(!source_ok||!known_old){say("edition_repair_blocked folder=%s reason=source_identity_unproven",destination.c_str());repair_required=true;continue;}
+            if(!lstat(repair.c_str(),&destination_stat)){
+                std::vector<uint8_t>repair_meta;apricot::EditionBundle repair_bundle;
+                if(!S_ISDIR(destination_stat.st_mode)||!intact_edition(repair)||!read_data((repair+"/edition.bin").c_str(),repair_meta,256)||!repair_bundle.load(repair_meta)||repair_bundle.media_revision!=1||!identity_matches(verified_input.identity,repair_bundle.identity)){
+                    say("edition_repair_blocked folder=%s reason=stale_repair_preserved",destination.c_str());repair_required=true;continue;
+                }
+            }
+            else {
+                NativeGameVideo repair_capture;auto loader=reinterpret_cast<PFN_vkGetInstanceProcAddr>(vk_icdGetInstanceProcAddr);
+                if(!repair_capture.initialize(loader,oq_tiles,sizeof(oq_tiles),oq_geometry,sizeof(oq_geometry),oq_geometry_resolve,sizeof(oq_geometry_resolve)))return stopped(display,canvas,repair_capture.error.c_str());
+                std::string repair_error;bool repair_ready=false;std::atomic<bool>repair_done{false};progress.timer.reset(now_seconds());
+                std::thread repair_worker([&]{
+                    if(refresh_media){
+                        apricot::aot::Result reused;
+                        if(read_data((destination+"/game-203.oqgame").c_str(),reused.module,256+256u*1024*1024+1048576*16))
+                            repair_ready=apricot::aot::finish_prepared_edition(verified_input,std::move(reused),repair.c_str(),repair_capture,Progress::publish,&progress,repair_error);
+                        else repair_error="Existing module unavailable for media refresh";
+                    }else repair_ready=apricot::aot::prepare_edition(input.c_str(),repair.c_str(),repair_capture,Progress::publish,&progress,repair_error);
+                    repair_done.store(true);
+                });
+                while(!repair_done.load()){apricot::aot::PreparationProgress current;{std::lock_guard<std::mutex> guard(progress.lock);current=progress.snapshot;}if(!Progress::update(&progress,current))progress.cancelled.store(true);usleep(16000);}repair_worker.join();repair_capture.geometry.close();repair_capture.tiles.close();
+                if(!repair_ready||!intact_edition(repair)){say("edition_repair_failed folder=%s reason=%s",destination.c_str(),repair_ready?"replacement_integrity_failed":repair_error.c_str());repair_required=true;continue;}
+            }
+            unsigned backup_index=0;std::string backup;
+            for(;backup_index<64;++backup_index){backup=destination+".damaged-"+std::to_string(backup_index);if(lstat(backup.c_str(),&destination_stat)&&errno==ENOENT)break;}
+            if(backup_index==64||rename(destination.c_str(),backup.c_str())){say("edition_repair_failed folder=%s reason=preserve_original_failed",destination.c_str());repair_required=true;continue;}
+            if(rename(repair.c_str(),destination.c_str())){rename(backup.c_str(),destination.c_str());say("edition_repair_failed folder=%s reason=commit_failed",destination.c_str());repair_required=true;continue;}
+            say("edition_repaired folder=%s prior_copy=%s",destination.c_str(),backup.c_str());continue;
+        }else if(errno!=ENOENT){say("edition_repair_blocked folder=%s reason=destination_unreadable",destination.c_str());repair_required=true;continue;}
         NativeGameVideo capture;auto loader=reinterpret_cast<PFN_vkGetInstanceProcAddr>(vk_icdGetInstanceProcAddr);
         if(!capture.initialize(loader,oq_tiles,sizeof(oq_tiles),oq_geometry,sizeof(oq_geometry),oq_geometry_resolve,sizeof(oq_geometry_resolve)))return stopped(display,canvas,capture.error.c_str());
         std::string error;bool ready=false;std::atomic<bool>done{false};progress.timer.reset(now_seconds());
@@ -174,17 +243,34 @@ int main() {
         for(const auto& e:editions)if(e.bundle.gold()==bundle.gold())return stopped(display,canvas,"MEHRERE DATENSAETZE DERSELBEN EDITION");
         Edition e;e.folder=base;e.bundle=bundle;e.label.resize(256*192);memcpy(e.label.data(),label.data(),label.size());editions.push_back(std::move(e));
     }
-    if(editions.empty())return stopped(display,canvas,"KEINE EDITION - EIGENE NDS IN ROMS ABLEGEN");
+    if(editions.empty())return stopped(display,canvas,repair_required?"BESCHAEDIGTE VORBEREITUNG - PASSENDE EIGENE ROM BEREITSTELLEN":"KEINE EDITION - EIGENE NDS IN ROMS ABLEGEN");
     std::sort(editions.begin(),editions.end(),[](const Edition&a,const Edition&b){return a.bundle.gold()>b.bundle.gold();});
     apricot::CartridgeView cartridge;std::vector<uint8_t> mesh;
     if(!read_data("/app0/userdata/cartridge.mesh",mesh,2*1024*1024)||!cartridge.load(mesh))return stopped(display,canvas,"CARTRIDGE MODELL FEHLT ODER IST UNGUELTIG");
     PreparedMenuMixer menu_audio;unsigned selected=0;bool any_music=false;
+#ifdef APRICOT_SHELL_MUSIC
+    bool shell_music_attempted=false;
+#endif
     for(unsigned n=0;n<editions.size();++n){
         auto& e=editions[n];std::vector<uint8_t> bytes;GameIdentity id{};
         memcpy(id.game_code,e.bundle.identity,4);memcpy(id.maker_code,e.bundle.identity+4,2);id.revision=e.bundle.identity[6];memcpy(id.sha256,e.bundle.identity+8,32);
         if(read_data((e.folder+"/title-menu.pcm").c_str(),bytes,64*1024*1024)){
             uint8_t digest[32];oq_sha256(bytes.data(),bytes.size(),digest);
-            if(!memcmp(digest,e.bundle.audio_sha,32)&&menu_audio.tracks[n].load(bytes,id))any_music=true;
+            if(!memcmp(digest,e.bundle.audio_sha,32)&&menu_audio.tracks[n].load(bytes,id)){
+                any_music=true;
+#ifdef APRICOT_SHELL_MUSIC
+                if(!shell_music_attempted){
+                    shell_music_attempted=true;std::string shell_error;bool shell_ok=false;std::atomic<bool>shell_done{false};
+                    std::thread shell_worker([&]{shell_ok=prepare_shell_music(bytes,APP_DATA,"/data/homebrew/PPSA99429/sce_sys","/user/appmeta/PPSA99429","PPSA99429",shell_error);shell_done.store(true);});
+                    while(!shell_done.load()){
+                        std::fill(canvas.begin(),canvas.end(),0xff201810u);
+                        menuText(canvas,80,300,"KACHELMUSIK WIRD VORBEREITET",0xffeeeeee,2);
+                        display.present(canvas.data(),1280,720,1280*4,stderr,nullptr,true);usleep(16000);
+                    }
+                    shell_worker.join();say("shell_music_ready=%d reason=%s",shell_ok,shell_ok?"ready":shell_error.c_str());
+                }
+#endif
+            }
         }
     }
     bool menu_started=any_music&&audio_start(PreparedMenuMixer::fill,&menu_audio);

@@ -6,7 +6,7 @@
   "conceptId": "99429",
   "contentBadgeType": 1,
   "contentId": "UP9000-PPSA99429_00-APRICOTGSREADER00",
-  "contentVersion": "00.020.023",
+  "contentVersion": "00.030.005",
   "downloadDataSize": 256,
   "kernel": {
     "flexibleMemorySize": 1073741824
@@ -21,7 +21,7 @@
     }
   },
   "masterVersion": "01.00",
-  "targetContentVersion": "00.020.023",
+  "targetContentVersion": "00.030.005",
   "gameIntent": {
     "permittedIntents": [
       {

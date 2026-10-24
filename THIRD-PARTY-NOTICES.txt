@@ -94,3 +94,5 @@ release privacy controls. Upstream copyrights and licenses are retained.
 Oxanium font and generated glyph atlas
   Copyright: the Oxanium Project Authors. SIL Open Font License 1.1.
   Font and license: assets/fonts/oxanium/Oxanium.ttf and OFL.txt.
+
+ATRAC9 shell-music encoder: GPL-3.0-or-later C++ port from PSGFX / PS5 AT9 Converter; LibAtrac9 tables MIT. See platform/vendor/at9/NOTICES.md and licenses/ATRAC9-NOTICES.txt. Music is generated locally from user data and is not included.

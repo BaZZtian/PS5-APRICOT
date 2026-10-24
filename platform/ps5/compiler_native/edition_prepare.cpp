@@ -2,6 +2,7 @@
 #include "game_boot.h"
 #include "sha256_stream.h"
 #include "preparation_staging.h"
+#include "preparation_checkpoint.h"
 #include <memory>
 #include <cstdio>
 #include <cerrno>
@@ -26,8 +27,17 @@ bool prepare_edition(const char*input,const char*destination,NativeGameVideo&vid
  if(!input||!destination){error="Missing preparation path";return false;}
  struct stat existing{};if(!lstat(destination,&existing)||errno!=ENOENT){error="Existing edition preserved";return false;}
  if(!update("VERIFY ROM"))return false;PreparedRom rom;if(!prepare_rom_file(input,rom,error))return false;
- Result result;PreparationReport report;if(!prepare_native_module(rom,result,report,error,callback,context))return false;
- return finish_prepared_edition(rom,std::move(result),destination,video,callback,context,error);
+ Result result;PreparationReport report;const std::string checkpoint=std::string(destination)+".checkpoint";bool resumed=false;
+ if(update("CHECK FOR SAFE RESUME")&&load_preparation_checkpoint(checkpoint,rom.identity,result.module)){
+  NativeGameModule checked;if(checked.from_bytes(result.module.data(),result.module.size(),rom.identity)){resumed=true;checked.close();}
+  else result.module.clear();
+ }
+ if(!resumed&&!prepare_native_module(rom,result,report,error,callback,context))return false;
+ if(!resumed&&!save_preparation_checkpoint(checkpoint,rom.identity,result.module)){
+  error="Preparation checkpoint could not be saved";return false;
+ }
+ if(!finish_prepared_edition(rom,std::move(result),destination,video,callback,context,error))return false;
+ remove_preparation_checkpoint(checkpoint);return true;
 }
 bool finish_prepared_edition(const PreparedRom&rom,Result&&result,const char*destination,NativeGameVideo&video,PreparationCallback callback,void*context,std::string&error){
  auto update=[&](const char*phase,uint64_t frame=0){if(!callback||callback(context,{phase,0,0xffffffffu,0,frame,0}))return true;error="Preparation cancelled";return false;};
@@ -49,7 +59,9 @@ bool finish_prepared_edition(const PreparedRom&rom,Result&&result,const char*des
   if(!machine->step()){error="Native title preparation stopped";return false;}
   auto f=machine->bus.raster.frames;if(f==last)continue;last=f;
   if(f%120==0&&!update("TITLE IMAGE AND MUSIC",f))return false;
-  if(f==4200){if(!video.render(machine->bus)){error=video.error;return false;}
+  // Both exact German profiles: 4200 is the logo-reveal flash; 4500 is
+  // the complete title logo, verified with native frame captures for each.
+  if(f==4500){if(!video.render(machine->bus)){error=video.error;return false;}
    label.resize(256*192*4);for(unsigned n=0;n<256*192;++n)put(label,n*4,video.pixels[256*192+n]|0xff000000u);
   }
  }
@@ -63,7 +75,7 @@ bool finish_prepared_edition(const PreparedRom&rom,Result&&result,const char*des
  }
  capture.samples.clear();capture.samples.shrink_to_fit();
  std::vector<uint8_t>manifest(256,0);memcpy(manifest.data(),"APED0001",8);put(manifest,8,256);put(manifest,12,rom.snapshot.size());memcpy(manifest.data()+16,rom.identity.game_code,4);memcpy(manifest.data()+20,rom.identity.maker_code,2);manifest[22]=rom.identity.revision;memcpy(manifest.data()+24,rom.identity.sha256,32);
- hash(result.module,manifest.data()+56);hash(label,manifest.data()+88);hash(audio,manifest.data()+120);hash(refs,manifest.data()+152);
+ hash(result.module,manifest.data()+56);hash(label,manifest.data()+88);hash(audio,manifest.data()+120);hash(refs,manifest.data()+152);put(manifest,184,1);
  if(!update("VERIFY AND COMMIT"))return false;
  std::string staging;if(!create_preparation_staging(destination,staging)){error="Preparation staging unavailable";return false;}
  const char*names[]={"game-data.bin","game-203.oqgame","title-label.rgba","title-menu.pcm","identity-refs.bin","edition.bin"};
