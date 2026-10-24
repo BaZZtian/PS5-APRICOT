@@ -1,2 +1,2 @@
 #pragma once
-#define APRICOT_VERSION "0.3.0"
+#define APRICOT_VERSION "00.030.005"

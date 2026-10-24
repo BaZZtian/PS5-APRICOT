@@ -33,8 +33,8 @@ your edition and start playing.
 
 ## Status and availability
 
-Download **[ApricotGS v0.3.0](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v0.3.0)**.
-Choose **ApricotGS-v0.3.0-PS5.zip** for the application. The release page also
+Download **[ApricotGS v00.030.005](https://github.com/BaZZtian/PS5-ApricotGS/releases/tag/v00.030.005)**.
+Choose **ApricotGS-v00.030.005-PS5.zip** for the application. The release page also
 contains the version history and known issues.
 
 This is an experimental release. A complete playthrough has not been verified.
@@ -49,7 +49,7 @@ This is an experimental release. A complete playthrough has not been verified.
 
 ### 1. Install the app
 
-Download **ApricotGS-v0.3.0-PS5.zip** from the release page and extract its
+Download **ApricotGS-v00.030.005-PS5.zip** from the release page and extract its
 `PPSA99429` folder into `/data/homebrew/` on the PS5. The executable should be at:
 
 ```text
